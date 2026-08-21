@@ -1,7 +1,6 @@
 numpy==1.26.4
-torch==2.2.2+cu121
-torchaudio==2.2.2+cu121
-TTS==0.22.0
+scipy==1.14.1
+coqui-tts
 kokoro==0.9.4
 transformers==4.49.0
 flask>=3.0.0
