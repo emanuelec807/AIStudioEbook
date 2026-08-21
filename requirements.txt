@@ -1,0 +1,14 @@
+numpy==1.26.4
+torch==2.2.2+cu121
+torchaudio==2.2.2+cu121
+TTS==0.22.0
+kokoro==0.9.4
+transformers==4.49.0
+flask>=3.0.0
+flask-cors>=4.0.0
+pydub>=0.25.1
+EbookLib>=0.18
+beautifulsoup4>=4.12.0
+accelerate>=0.28.0
+soundfile>=0.12.1
+requests>=2.31.0

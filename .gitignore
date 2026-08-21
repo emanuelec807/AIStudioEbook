@@ -1,0 +1,19 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Environments
+venv/
+env/
+.env
+
+# Generated Audiobook & Project outputs
+audiolibri_output/
+audiolibriEpub/
+*.wav.tmp
+
+# Custom uploaded voices (presets voce_rif_female.wav and voce_rif_male.wav can be committed)
+voce_rif_custom.wav
+temp_import.epub

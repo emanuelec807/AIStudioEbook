@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio Editoriale AI - Colab Edition</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+
+    <style>
+        /* --- MATERIAL 3 TOKENS (TEMA CHIARO) --- */
+        :root {
+            --md-sys-color-primary: #0b57d0;
+            --md-sys-color-on-primary: #ffffff;
+            --md-sys-color-primary-container: #d3e3fd;
+            --md-sys-color-on-primary-container: #041e49;
+            --md-sys-color-secondary-container: #c2e7ff;
+            --md-sys-color-on-secondary-container: #001d35;
+            --md-sys-color-surface: #f8fafd;
+            --md-sys-color-surface-container-low: #f1f4f9;
+            --md-sys-color-surface-container: #e9eef6;
+            --md-sys-color-surface-container-high: #e1e6ef;
+            --md-sys-color-on-surface: #1f1f1f;
+            --md-sys-color-on-surface-variant: #444746;
+            --md-sys-color-outline: #74777f;
+            --md-sys-color-outline-variant: #c4c7c5;
+            --md-sys-color-error: #b3261e;
+        }
+
+        /* --- MATERIAL 3 TOKENS (TEMA SCURO) --- */
+        [data-theme="dark"] {
+            --md-sys-color-primary: #a8c7fa;
+            --md-sys-color-on-primary: #062e6f;
+            --md-sys-color-primary-container: #0842a0;
+            --md-sys-color-on-primary-container: #d3e3fd;
+            --md-sys-color-secondary-container: #004a77;
+            --md-sys-color-on-secondary-container: #c2e7ff;
+            --md-sys-color-surface: #111318;
+            --md-sys-color-surface-container-low: #191c20;
+            --md-sys-color-surface-container: #1d2024;
+            --md-sys-color-surface-container-high: #282a2f;
+            --md-sys-color-on-surface: #e2e2e9;
+            --md-sys-color-on-surface-variant: #c4c6d0;
+            --md-sys-color-outline: #8e9099;
+            --md-sys-color-outline-variant: #44474e;
+            --md-sys-color-error: #f2b8b5;
+        }
+
+        body { font-family: 'Roboto', sans-serif; margin: 0; padding: 0; background-color: var(--md-sys-color-surface); color: var(--md-sys-color-on-surface); height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background-color 0.3s, color 0.3s; }
+        
+        .icon { vertical-align: middle; margin-right: 6px; font-size: 20px; }
+
+        /* --- TOP APP BAR --- */
+        .top-app-bar { background-color: var(--md-sys-color-surface); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--md-sys-color-surface-container-high); transition: 0.3s; }
+        .top-app-bar-title { font-size: 22px; color: var(--md-sys-color-on-surface); display: flex; align-items: center; font-weight: 500;}
+        
+        /* Segmented Buttons */
+        .settings-group { display: flex; gap: 24px; align-items: center; }
+        .setting-label { font-size: 14px; font-weight: 500; color: var(--md-sys-color-on-surface-variant); margin-right: 8px; }
+
+        .segmented-button { display: inline-flex; border-radius: 100px; outline: 1px solid var(--md-sys-color-outline); overflow: hidden; }
+        .segmented-button input[type="radio"] { display: none; }
+        .segmented-button label { padding: 8px 16px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--md-sys-color-on-surface); transition: background 0.2s; border-right: 1px solid var(--md-sys-color-outline); }
+        .segmented-button label:last-of-type { border-right: none; }
+        .segmented-button input[type="radio"]:checked + label { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+
+        .theme-toggle { background: transparent; border: none; color: var(--md-sys-color-on-surface-variant); cursor: pointer; padding: 8px; border-radius: 50%; display: flex; transition: 0.2s; }
+        .theme-toggle:hover { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); }
+
+        /* --- TOOLBAR --- */
+        .toolbar { padding: 16px 24px; display: flex; gap: 16px; background-color: var(--md-sys-color-surface-container-low); align-items: center; transition: 0.3s;}
+        
+        /* Text Field */
+        .md-text-field { display: flex; flex-direction: column; background-color: var(--md-sys-color-surface-container-high); border-radius: 4px 4px 0 0; border-bottom: 1px solid var(--md-sys-color-on-surface-variant); padding: 8px 16px; width: 250px; transition: 0.3s;}
+        .md-text-field label { font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+        .md-text-field input, .md-text-field select { background: transparent; border: none; outline: none; font-family: 'Roboto', sans-serif; font-size: 16px; color: var(--md-sys-color-on-surface); padding-top: 4px; }
+        .md-text-field input option, .md-text-field select option { background-color: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface); }
+        .md-text-field:focus-within { border-bottom: 2px solid var(--md-sys-color-primary); }
+        .md-text-field:focus-within label { color: var(--md-sys-color-primary); }
+
+        /* Buttons */
+        .md-btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 24px; border-radius: 100px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: 0.2s; font-family: 'Roboto', sans-serif; }
+        .md-btn .material-symbols-outlined { font-size: 18px; margin-right: 8px; }
+        
+        .md-btn-primary { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+        .md-btn-primary:hover { box-shadow: 0 1px 3px rgba(0,0,0,0.3); opacity: 0.9;}
+        
+        .md-btn-tonal { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+        .md-btn-tonal:hover { filter: brightness(0.95); }
+        
+        .md-btn-outlined { background-color: transparent; border: 1px solid var(--md-sys-color-outline); color: var(--md-sys-color-primary); }
+        .md-btn-outlined:hover { background-color: var(--md-sys-color-surface-container-high); }
+
+        .spacer { flex-grow: 1; }
+
+        /* --- BOARD & CARDS --- */
+        .board { flex-grow: 1; padding: 24px; display: flex; gap: 24px; overflow-x: auto; background-color: var(--md-sys-color-surface); align-items: flex-start; transition: 0.3s;}
+        .board::-webkit-scrollbar { height: 10px; }
+        .board::-webkit-scrollbar-thumb { background: var(--md-sys-color-outline-variant); border-radius: 100px; }
+
+        .md-card { background-color: var(--md-sys-color-surface-container-low); border-radius: 24px; min-width: 480px; width: 480px; display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; border: 1px solid var(--md-sys-color-surface-container-high); transition: 0.3s;}
+        
+        .card-header { padding: 16px 24px 0 24px; display: flex; justify-content: space-between; align-items: center; }
+        .card-title-input { 
+            font-size: 20px; 
+            font-weight: 500; 
+            border: none; 
+            border-bottom: 1px dashed var(--md-sys-color-outline-variant); 
+            background: transparent; 
+            color: var(--md-sys-color-on-surface); 
+            outline: none; 
+            width: 80%; 
+            padding: 4px 8px; 
+            border-radius: 4px 4px 0 0; 
+            transition: 0.2s; 
+            margin-left: -8px;
+        }
+        .card-title-input:hover { 
+            background-color: var(--md-sys-color-surface-container); 
+            border-bottom: 1px solid var(--md-sys-color-primary); 
+        }
+        .card-title-input:focus { 
+            background-color: var(--md-sys-color-surface-container-high); 
+            border-bottom: 2px solid var(--md-sys-color-primary); 
+        }
+        .icon-btn { background: transparent; border: none; color: var(--md-sys-color-on-surface-variant); cursor: pointer; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
+        .icon-btn:hover { background-color: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-error); }
+
+        .md-tabs { display: flex; border-bottom: 1px solid var(--md-sys-color-surface-container-high); padding: 0 16px; margin-top: 16px; overflow-x: auto; }
+        .md-tab { padding: 12px 16px; background: transparent; border: none; color: var(--md-sys-color-on-surface-variant); font-weight: 500; font-size: 14px; cursor: pointer; position: relative; font-family: 'Roboto', sans-serif;}
+        .md-tab.active { color: var(--md-sys-color-primary); }
+        .md-tab.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background-color: var(--md-sys-color-primary); border-radius: 3px 3px 0 0; }
+
+        .card-content { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+        
+        .md-textarea { width: 100%; height: 250px; background-color: var(--md-sys-color-surface-container); border: none; border-radius: 8px; padding: 16px; font-size: 15px; color: var(--md-sys-color-on-surface); font-family: 'Roboto', sans-serif; resize: none; box-sizing: border-box; outline: 1px solid transparent; transition: 0.2s; line-height: 1.5; }
+        .md-textarea:focus { outline: 2px solid var(--md-sys-color-primary); }
+
+        .action-surface { background-color: var(--md-sys-color-surface-container); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 16px; transition: 0.3s;}
+        .action-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+        .status-text { font-size: 13px; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 6px; }
+
+        .add-card-btn { min-width: 200px; height: 200px; border-radius: 24px; border: 2px dashed var(--md-sys-color-outline-variant); background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; color: var(--md-sys-color-primary); transition: 0.2s; }
+        .add-card-btn:hover { background-color: var(--md-sys-color-surface-container-high); }
+        .add-card-btn .material-symbols-outlined { font-size: 48px; margin-bottom: 8px; }
+
+        audio { width: 100%; height: 40px; outline: none; border-radius: 100px; }
+        .spin { animation: spin 1.5s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* --- STILI MODALE BATCH --- */
+        .dialog-batch { background-color: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-on-surface); border: none; border-radius: 24px; padding: 24px; width: 400px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .dialog-batch::backdrop { background: rgba(0,0,0,0.6); }
+        .dialog-batch h2 { margin-top: 0; font-size: 20px; font-weight: 500;}
+        .checklist-capitoli { max-height: 250px; overflow-y: auto; background: var(--md-sys-color-surface); padding: 12px; border-radius: 8px; margin: 16px 0; border: 1px solid var(--md-sys-color-outline-variant);}
+        .dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;}
+    </style>
+</head>
+<body>
+
+    <header class="top-app-bar">
+        <div class="top-app-bar-title">
+            <span class="material-symbols-outlined icon" style="font-size: 28px; color: var(--md-sys-color-primary);">auto_stories</span>
+            Studio Editoriale AI <span style="font-size: 14px; margin-left: 10px; opacity: 0.7; background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); padding: 2px 10px; border-radius: 100px;">Colab Edition</span>
+        </div>
+        
+        <div class="settings-group">
+            <div>
+                <span class="setting-label">Traduttore LLM</span>
+                <div class="segmented-button">
+                    <input type="radio" id="translategemma" name="llm_model" value="translategemma:4b">
+                    <label for="translategemma">TranslateGemma 4B</label>
+                    <input type="radio" id="translategemma12b" name="llm_model" value="translategemma:12b" checked>
+                    <label for="translategemma12b">TranslateGemma 12B</label>
+                </div>
+            </div>
+            <div>
+                <span class="setting-label">Motore Audio</span>
+                <div class="segmented-button">
+                    <input type="radio" id="xtts" name="tts_model" value="xtts" checked onchange="aggiornaInterfacciaGlobale()">
+                    <label for="xtts">XTTSv2</label>
+                    <input type="radio" id="kokoro" name="tts_model" value="kokoro" onchange="aggiornaInterfacciaGlobale()">
+                    <label for="kokoro">Kokoro</label>
+                </div>
+            </div>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Cambia Tema">
+                <span class="material-symbols-outlined" id="theme-icon">dark_mode</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="toolbar">
+        <div class="md-text-field">
+            <label>Titolo del Libro</label>
+            <input type="text" id="titolo-libro" value="Il Mio Audiolibro">
+        </div>
+        <div class="md-text-field">
+            <label>Autore</label>
+            <input type="text" id="autore-libro" value="Autore">
+        </div>
+        
+        <button class="md-btn md-btn-outlined" onclick="salvaProgettoLocalmente()">
+            <span class="material-symbols-outlined">save</span> Salva Progetto
+        </button>
+        <input type="file" id="file-import" style="display:none;" accept=".json" onchange="caricaProgetto(event)">
+        <button class="md-btn md-btn-outlined" onclick="document.getElementById('file-import').click()">
+            <span class="material-symbols-outlined">folder_open</span> Carica Progetto
+        </button>
+
+        <input type="file" id="epub-import" style="display:none;" accept=".epub" onchange="importaEpub(event)">
+        <button class="md-btn md-btn-outlined" onclick="document.getElementById('epub-import').click()">
+            <span class="material-symbols-outlined">upload_file</span> Importa EPUB
+        </button>
+
+        <input type="file" id="xtts-custom-voice-upload" style="display:none;" accept=".wav" onchange="caricaVocePersonalizzata(event)">
+        <button class="md-btn md-btn-outlined" onclick="document.getElementById('xtts-custom-voice-upload').click()">
+            <span class="material-symbols-outlined">mic</span> Carica Voce (Voice Clone .wav)
+        </button>
+        
+        <div class="spacer"></div>
+        
+        <button class="md-btn md-btn-tonal" onclick="apriModaleBatch()">
+            <span class="material-symbols-outlined">queue_music</span> Genera Multiplo in Coda
+        </button>
+        
+        <button class="md-btn md-btn-primary" onclick="esportaEpubESalvaSulServer()">
+            <span class="material-symbols-outlined">publish</span> Genera EPUB & Salva
+        </button>
+
+        <button class="md-btn md-btn-primary" onclick="apriModaleAudiolibro()">
+            <span class="material-symbols-outlined">auto_stories</span> Genera Audiolibro Completo
+        </button>
+    </div>
+
+    <div class="board" id="chaptersContainer">
+        <button class="add-card-btn" onclick="aggiungiCapitolo()">
+            <span class="material-symbols-outlined">add_circle</span>
+            <span style="font-weight: 500; font-family: 'Roboto';">Nuovo Blocco</span>
+        </button>
+    </div>
+
+    <dialog id="modale-batch" class="dialog-batch">
+        <h2>Genera Coda Audio</h2>
+        
+        <div class="md-text-field" style="width: 100%; border:none; background: transparent; padding:0; margin-bottom: 16px;">
+            <label style="margin-bottom: 8px; display:block;">Lingua dei tab da leggere:</label>
+            <select id="batch-lang" onchange="aggiornaVociBatch()" style="width: 100%; padding: 8px; border-radius: 4px; background: var(--md-sys-color-surface);">
+                <option value="it" selected>Italiano</option>
+                <option value="en">Inglese</option>
+                <option value="fr">Francese</option>
+                <option value="es">Spagnolo</option>
+                <option value="ja">Giapponese</option>
+                <option value="zh">Cinese</option>
+                <option value="hi">Hindi</option>
+                <option value="pt">Portoghese</option>
+            </select>
+        </div>
+        
+        <div class="md-text-field" style="width: 100%; border:none; background: transparent; padding:0;">
+            <label style="margin-bottom: 8px; display:block;">Voce da utilizzare per l'audiolibro:</label>
+            <select id="batch-voice" style="width: 100%; padding: 8px; border-radius: 4px; background: var(--md-sys-color-surface);">
+                </select>
+        </div>
+        
+        <div id="lista-capitoli-batch" class="checklist-capitoli"></div>
+        
+        <div class="dialog-actions">
+            <button class="md-btn md-btn-outlined" onclick="chiudiModaleBatch()">Annulla</button>
+            <button class="md-btn md-btn-primary" onclick="avviaCodaAudio()">Inizia Generazione</button>
+        </div>
+    </dialog>
+
+    <dialog id="modale-audiolibro" class="dialog-batch">
+        <h2>Genera Audiolibro Completo</h2>
+        <p style="color: var(--md-sys-color-outline); margin-bottom: 16px; font-size: 14px;">
+            Questa funzione unirà tutti i capitoli in un unico grande file audio. L'operazione potrebbe richiedere molto tempo a seconda della lunghezza del libro.
+        </p>
+        
+        <div class="md-text-field" style="width: 100%; border:none; background: transparent; padding:0; margin-bottom: 16px;">
+            <label style="margin-bottom: 8px; display:block;">Lingua del libro:</label>
+            <select id="audiobook-lang" onchange="aggiornaVociAudiolibro()" style="width: 100%; padding: 8px; border-radius: 4px; background: var(--md-sys-color-surface);">
+                <option value="it" selected>Italiano</option>
+                <option value="en">Inglese</option>
+                <option value="fr">Francese</option>
+                <option value="es">Spagnolo</option>
+                <option value="ja">Giapponese</option>
+                <option value="zh">Cinese</option>
+                <option value="hi">Hindi</option>
+                <option value="pt">Portoghese</option>
+            </select>
+        </div>
+        
+        <div class="md-text-field" style="width: 100%; border:none; background: transparent; padding:0;">
+            <label style="margin-bottom: 8px; display:block;">Voce del narratore:</label>
+            <select id="audiobook-voice" style="width: 100%; padding: 8px; border-radius: 4px; background: var(--md-sys-color-surface);">
+                </select>
+        </div>
+        
+        <div class="dialog-actions" style="margin-top: 24px;">
+            <button class="md-btn md-btn-outlined" onclick="document.getElementById('modale-audiolibro').close()">Annulla</button>
+            <button class="md-btn md-btn-primary" onclick="avviaAudiolibroCompleto()">Avvia Creazione</button>
+        </div>
+    </dialog>
+
+    <script src="audiolibri.js"></script>
+</body>
+</html>
