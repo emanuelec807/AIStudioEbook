@@ -7,6 +7,7 @@ if sys.platform == "win32":
         pass
 
 import os
+os.environ["COQUI_TOS_AGREED"] = "1"
 import json
 import re
 import gc
@@ -157,12 +158,13 @@ def get_xtts():
     global xtts_model
     if xtts_model is None:
         print("⏳ Caricamento del modello XTTSv2 in corso (sulla scheda video)...")
+        os.environ["COQUI_TOS_AGREED"] = "1"
         gpu = torch.cuda.is_available()
         torch.set_num_threads(1)
         try:
             from TTS.api import TTS
         except ImportError as e:
-            raise Exception("Libreria 'TTS' (Coqui TTS) non trovata. Esegui la Cella 1 del Notebook Colab per installare 'TTS' e poi riavvia il server.")
+            raise Exception("Libreria 'TTS' (Coqui TTS) non trovata. Esegui la Cella 2 del Notebook Colab per installare 'TTS' e poi riavvia il server.")
         xtts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=gpu)
         print(f"✅ Modello XTTS caricato con successo sulla scheda video: {'CUDA' if gpu else 'CPU'}")
     return xtts_model
