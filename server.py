@@ -52,125 +52,132 @@ traduzione_lock = Lock()
 audio_lock = Lock()
 audio_jobs = {}
 
-# --- HELPER FUNCTIONS FOR TEXT SPLITTING & PROCESSING ---
-def dividi_testo_xtts(testo, limite=180):
-    righe = testo.split('\n')
-    risultato = []
-    
-    for riga in righe:
-        riga = riga.strip()
-        if not riga:
-            continue
-        
-        pattern = r'([^.!?。！？\n]+[.!?。！？]*)'
-        pezzi = re.findall(pattern, riga)
-        if not pezzi:
-            pezzi = [riga]
-            
-        for pezzo in pezzi:
-            pezzo = pezzo.strip()
-            if not pezzo:
-                continue
-            
-            if len(pezzo) > limite:
-                sotto_pezzi = re.split(r'([,;，、\s]{2,}|[,;，、])', pezzo)
-                accumulo = ""
-                for sp in sotto_pezzi:
-                    if len(accumulo) + len(sp) > limite:
-                        if accumulo.strip():
-                            risultato.append(accumulo.strip())
-                        accumulo = sp
-                    else:
-                        accumulo += sp
-                if accumulo.strip():
-                    risultato.append(accumulo.strip())
-            else:
-                risultato.append(pezzo)
-                
-        risultato.append("___PAUSA_PARAGRAFO___")
-        
-    if risultato and risultato[-1] == "___PAUSA_PARAGRAFO___":
-        risultato.pop()
-        
-    return risultato
-
-def dividi_testo_kokoro(testo):
-    pattern = r'([^.!?,;:。！？\n]+[.!?,;:。！？]*)'
-    righe = testo.split('\n')
-    risultato = []
-    
-    for riga in righe:
-        riga = riga.strip()
-        if not riga:
-            continue
-        pezzi = re.findall(pattern, riga)
-        if not pezzi:
-            pezzi = [riga]
-        for pezzo in pezzi:
-            if pezzo.strip():
-                risultato.append(pezzo.strip())
-        risultato.append("___PAUSA_PARAGRAFO___")
-        
-    if risultato and risultato[-1] == "___PAUSA_PARAGRAFO___":
-        risultato.pop()
-    return risultato
+# --- HELPER FUNCTIONS FOR TEXT SPLITTING & PROCESSING (FROM SERVER_UNIFICATO) ---
+def applica_glossario(testo):
+    glossario = {
+        "Gramps": "Nonno", "gramps": "nonno",
+        "Mom": "Mamma", "mom": "mamma",
+        "Dad": "Papà", "dad": "papà",
+        "Chief": "Capo", "chief": "capo"
+    }
+    for originale, tradotto in glossario.items():
+        testo = re.sub(r'\b' + originale + r'\b', tradotto, testo)
+    return testo
 
 def correggi_pronuncia(testo):
-    # Correzioni fonetiche hardcoded per nomi inglesi comuni
-    correzioni = {
-        r'\bBeau\b': 'Bo',
-        r'\bCullen\b': 'Callen',
-        r'\bCharlie\b': 'Ciarli',
-        r'\bSwan\b': 'Suan',
-        r'\bForks\b': 'Forcs',
-        r'\bChief\b': 'Scief',
-        r'\bBilly\b': 'Billi',
-        r'\bJacob\b': 'Giacob',
-        r'\bJessica\b': 'Gessica',
-        r'\bAngela\b': 'Angiela',
-        r'\bMike\b': 'Maik',
-        r'\bNewton\b': 'Niuton',
-        r'\bEric\b': 'Erics',
-        r'\bBella\b': 'Bella',
-        r'\bEdward\b': 'Eduard',
-        r'\bAlice\b': 'Alis',
-        r'\bJasper\b': 'Giasper',
-        r'\bRosalie\b': 'Rosali',
-        r'\bEmmett\b': 'Emmet',
-        r'\bCarlisle\b': 'Carlail',
-        r'\bEsme\b': 'Esme',
-        r'\bAro\b': 'Aro',
-        r'\bMarcus\b': 'Marcus',
-        r'\bCaius\b': 'Caius',
-        r'\bJane\b': 'Gein',
-        r'\bAlec\b': 'Alec',
-        r'\bDemetri\b': 'Demetri',
-        r'\bFelix\b': 'Felix',
-        r'\bVictoria\b': 'Vittoria',
-        r'\bLaurent\b': 'Loran',
-        r'\bJames\b': 'Geims',
-        r'\bBree\b': 'Bri',
-        r'\bRiley\b': 'Raili'
+    dizionario = {
+        "Beau": "Bo", "Edythe": "Edith", "Cullen": "Callen",
+        "Marty": "Marti", "Charlie": "Ciarli", "Carine": "Carin",
+        "Earnest": "Ernest", "Archie": "Arci", "Edy": "Edi",
+        "McKayla": "Macheila", "Jeremy": "Geremi", "Taylor": "Teilor",
+        "Logan": "Loghan", "Jessamine": "Gessamin", "Royal": "Roial",
+        "Eleanor": "Elenor", "Joss": "Gioss", "Phil": "Fil",
+        "Newton": "Niuton", "Forks": "Forcs", "Washington": "Uoscington",
+        "Seattle": "Siattol", "Chevy": "Scevi", "Sox": "Socs",
+        "Mariners": "Meriners", "American Spirit": "American Spirit"
     }
-    for pattern, sostituto in correzioni.items():
-        testo = re.sub(pattern, sostituto, testo, flags=re.IGNORECASE)
+    for scritta, letta in dizionario.items():
+        testo = re.sub(r'\b' + scritta + r'\b', letta, testo)
     return testo
 
-def applica_glossario(testo):
-    # Glossario standard per traduzioni letterarie
-    glossario = {
-        r'\bGramps\b': 'Nonno',
-        r'\bMom\b': 'Mamma',
-        r'\bDad\b': 'Papà',
-        r'\bhoney\b': 'tesoro',
-        r'\bdarling\b': 'caro',
-        r'\bsweetheart\b': 'tesoro',
-        r'\bguy\b': 'ragazzo',
-        r'\bguys\b': 'ragazzi'
-    }
-    for pattern, sostituto in glossario.items():
-        testo = re.sub(pattern, sostituto, testo, flags=re.IGNORECASE)
-    return testo
+def dividi_testo_xtts(testo, limite=180):
+    paragrafi = [p.strip() for p in testo.split('\n') if p.strip()]
+    frammenti_finali = []
+    
+    # 1. AGGIUNTA PUNTEGGIATURA ASIATICA (。！？) E SPAZIO OPZIONALE (\s*)
+    pattern = r'([.!?。！？]["”»\']?\s*)'
+    
+    for paragrafo in paragrafi:
+        paragrafo = paragrafo.replace("...", "___PUNTINI___")
+        parti = re.split(pattern, paragrafo + " ")
+        
+        frasi = []
+        for i in range(0, len(parti) - 1, 2):
+            frasi.append((parti[i] + parti[i+1]).strip())
+        if len(parti) % 2 != 0 and parti[-1].strip():
+            frasi.append(parti[-1].strip())
+        
+        chunk_temporaneo = ""
+        for frase in frasi:
+            if not frase: continue
+            
+            # 2. AGGIUNTO CONTROLLO ENFASI ANCHE PER SIMBOLI ASIATICI
+            chiude_con_enfasi = bool(re.search(r'[!?！？]["”»\']?$', frase))
+            
+            if len(chunk_temporaneo) + len(frase) <= limite:
+                chunk_temporaneo += frase + " "
+                if chiude_con_enfasi:
+                    frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                    chunk_temporaneo = ""
+            else:
+                if chunk_temporaneo.strip():
+                    frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                
+                if len(frase) > limite:
+                    # 3. AGGIUNTE VIRGOLE E PAUSE ASIATICHE (，、；：) PER I TAGLI D'EMERGENZA
+                    sub_frasi = re.split(r'(?<=[,;:”»"’\'-，、；：])\s*', frase)
+                    sub_chunk = ""
+                    for sub in sub_frasi:
+                        if len(sub_chunk) + len(sub) <= limite:
+                            sub_chunk += sub + " "
+                        else:
+                            if sub_chunk.strip():
+                                frammenti_finali.append(sub_chunk.strip().replace("___PUNTINI___", "..."))
+                            sub_chunk = sub + " "
+                    chunk_temporaneo = sub_chunk
+                    if chiude_con_enfasi and chunk_temporaneo.strip():
+                        frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                        chunk_temporaneo = ""
+                else:
+                    chunk_temporaneo = frase + " "
+                    if chiude_con_enfasi:
+                        frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                        chunk_temporaneo = ""
+                        
+        if chunk_temporaneo.strip():
+            frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+            
+        frammenti_finali.append("___PAUSA_PARAGRAFO___")
+        
+    return frammenti_finali
+
+def dividi_testo_kokoro(testo):
+    paragrafi_grezzi = testo.split('\n')
+    frammenti_finali = []
+    
+    # 1. AGGIUNTA PUNTEGGIATURA ASIATICA FORTE (。！？) E SPAZIO OPZIONALE (\s*)
+    pattern_punteggiatura_forte = r'([.!?。！？]["”»\']?\s*)'
+    
+    for paragrafo in paragrafi_grezzi:
+        paragrafo = paragrafo.strip()
+        if not paragrafo: continue
+            
+        parti = re.split(pattern_punteggiatura_forte, paragrafo + " ")
+        frasi = []
+        for i in range(0, len(parti) - 1, 2):
+            frasi.append((parti[i] + parti[i+1]).strip())
+        if len(parti) % 2 != 0 and parti[-1].strip():
+            frasi.append(parti[-1].strip())
+        
+        for frase in frasi:
+            if not frase: continue
+            
+            # 2. AGGIUNTE VIRGOLE E PAUSE ASIATICHE (，、；：) E SPAZIO OPZIONALE (\s*)
+            sotto_frasi = re.split(r'([,;，、；：]["”»\']?\s*)', frase)
+            
+            frammenti_con_virgola = []
+            for i in range(0, len(sotto_frasi) - 1, 2):
+                frammenti_con_virgola.append((sotto_frasi[i] + sotto_frasi[i+1]).strip())
+            if len(sotto_frasi) % 2 != 0 and sotto_frasi[-1].strip():
+                frammenti_con_virgola.append(sotto_frasi[-1].strip())
+            
+            for frammento in frammenti_con_virgola:
+                 if frammento.strip(): # Piccolo check di sicurezza per evitare frammenti vuoti
+                     frammenti_finali.append(frammento)
+
+        frammenti_finali.append("___PAUSA_PARAGRAFO___")
+        
+    return frammenti_finali
 
 # --- MODEL LOADING FUNCTIONS ---
 def get_xtts():
