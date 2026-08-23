@@ -397,7 +397,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                         continue
                     
                     frasi_count += 1
-                    pct = min(99, max(5, int((frasi_count / tot) * 95)))
+                    pct = min(99, max(1, int((frasi_count / tot) * 100)))
                     audio_jobs[job_id]["current"] = frasi_count
                     audio_jobs[job_id]["pct"] = pct
                     audio_jobs[job_id]["msg"] = "Generazione audio in corso..."
@@ -452,7 +452,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                         continue
                     
                     frasi_count += 1
-                    pct = min(99, max(5, int((frasi_count / tot) * 95)))
+                    pct = min(99, max(1, int((frasi_count / tot) * 100)))
                     audio_jobs[job_id]["current"] = frasi_count
                     audio_jobs[job_id]["pct"] = pct
                     audio_jobs[job_id]["msg"] = "Generazione audio in corso..."

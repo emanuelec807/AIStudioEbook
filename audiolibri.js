@@ -354,6 +354,9 @@ async function richiediTraduzione(id) {
     }
 }
 
+// Tracciamento timer attivi per evitare sovrapposizioni
+const activeAudioPolls = {};
+
 async function generaAudio(id) {
     salvaTestoCorrente(id);
     const linguaAttiva = datiCapitoli[id].linguaAttiva;
@@ -369,11 +372,16 @@ async function generaAudio(id) {
 
     if (!testo || !testo.trim()) return alert("Il testo per l'audio è vuoto!");
 
+    if (activeAudioPolls[id]) {
+        clearInterval(activeAudioPolls[id]);
+        delete activeAudioPolls[id];
+    }
+
     statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Generazione audio in corso...`;
     playerDiv.innerHTML = "";
     progBox.style.display = 'block';
-    progFill.style.width = '5%';
-    progPct.innerText = '5%';
+    progFill.style.width = '2%';
+    progPct.innerText = '2%';
     progMsg.innerText = "Generazione audio in corso...";
 
     const engine = document.getElementById('kokoro').checked ? 'kokoro' : 'xtts';
@@ -394,24 +402,24 @@ async function generaAudio(id) {
         if (!startRes.ok) throw new Error("Impossibile avviare il processo audio sul server");
         const { job_id } = await startRes.json();
 
-        // Polling del progresso ogni 800ms
-        const pollTimer = setInterval(async () => {
+        // Polling rapido ogni 400ms per massima fluidità
+        activeAudioPolls[id] = setInterval(async () => {
             try {
                 const progRes = await fetch(`${API_BASE}/audio_progress/${job_id}`);
                 if (!progRes.ok) return;
                 const job = await progRes.json();
 
                 if (job.status === 'processing' || job.status === 'pending') {
-                    const safePct = Math.min(99, Math.max(5, parseInt(job.pct) || 5));
+                    const safePct = Math.min(99, Math.max(2, parseInt(job.pct) || 2));
                     progFill.style.width = `${safePct}%`;
                     progPct.innerText = `${safePct}%`;
                     progMsg.innerText = 'Generazione audio in corso...';
                     statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Generazione audio in corso...`;
                 } else if (job.status === 'completed') {
-                    clearInterval(pollTimer);
+                    clearInterval(activeAudioPolls[id]);
+                    delete activeAudioPolls[id];
                     progFill.style.width = '100%';
                     progPct.innerText = '100%';
-                    progMsg.innerText = 'Audio generato!';
                     
                     statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-primary);">task_alt</span> Audio e MP3 pronti!`;
                     const audioUrl = `${API_BASE}/${job.audio_url}`;
@@ -421,16 +429,18 @@ async function generaAudio(id) {
                             <span class="material-symbols-outlined">download</span> Scarica .WAV
                         </a>
                     `;
-                    setTimeout(() => { progBox.style.display = 'none'; }, 2000);
+                    // Nasconde subito la barra di caricamento
+                    progBox.style.display = 'none';
                 } else if (job.status === 'error') {
-                    clearInterval(pollTimer);
+                    clearInterval(activeAudioPolls[id]);
+                    delete activeAudioPolls[id];
                     progBox.style.display = 'none';
                     statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">error</span> Errore: ${job.error}`;
                 }
             } catch (pollErr) {
                 console.error("Polling error:", pollErr);
             }
-        }, 800);
+        }, 400);
 
     } catch (error) {
         progBox.style.display = 'none';
