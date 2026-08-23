@@ -64,6 +64,32 @@ def applica_glossario(testo):
         testo = re.sub(r'\b' + originale + r'\b', tradotto, testo)
     return testo
 
+def pulisci_testo_per_tts(testo):
+    if not testo: return ""
+    # 1. Rimuovi simboli markdown che mandano in crash o spelling il TTS (*corsivo*, **grassetto**, _sottolineato_)
+    testo = re.sub(r'[*_~`]', '', testo)
+    
+    # 2. Normalizza trattini ed em-dash
+    testo = testo.replace('—', ' - ').replace('–', ' - ')
+    
+    # 3. Normalizza barre (es. stesso/a -> stesso)
+    testo = testo.replace('stesso/a', 'stesso')
+    testo = testo.replace('/', ' ')
+    
+    # 4. Normalizza virgolette e caratteri spagnoli/estranei
+    testo = testo.replace('«', '"').replace('»', '"').replace('“', '"').replace('”', '"')
+    testo = testo.replace('¿', '').replace('¡', '')
+    
+    # 5. Normalizza abbreviazioni con il punto per evitare che vengano lette come acronimi
+    testo = re.sub(r'\bMrs\.\s*', 'Signora ', testo)
+    testo = re.sub(r'\bMr\.\s*', 'Signor ', testo)
+    testo = re.sub(r'\bDr\.\s*', 'Dottor ', testo)
+    testo = re.sub(r'\bProf\.\s*', 'Professore ', testo)
+    
+    # 6. Spazi multipli
+    testo = re.sub(r'[ \t]+', ' ', testo)
+    return testo
+
 def dividi_testo_xtts(testo, limite=180):
     paragrafi = [p.strip() for p in testo.split('\n') if p.strip()]
     frammenti_finali = []
@@ -378,11 +404,13 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
             os.makedirs(cartella_out, exist_ok=True)
 
             if engine == "kokoro":
-                pipeline = get_kokoro(voice[0])
+                kokoro_lang = voice[0] if len(voice) > 0 and voice[0] in ['a', 'b', 'e', 'f', 'h', 'i', 'j', 'p', 'z'] else (lang[0] if lang else 'i')
+                pipeline = get_kokoro(kokoro_lang)
                 output_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_kokoro.wav"
                 mp3_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_kokoro.mp3"
                 
-                frasi = dividi_testo_kokoro(text)
+                text_elaborato = pulisci_testo_per_tts(text)
+                frasi = dividi_testo_kokoro(text_elaborato)
                 frasi_da_sintetizzare = [f for f in frasi if f != "___PAUSA_PARAGRAFO___" and f.strip()]
                 tot = max(1, len(frasi_da_sintetizzare))
                 audio_jobs[job_id]["total"] = tot
@@ -435,7 +463,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                 speaker_file = speaker_file_lang if os.path.exists(speaker_file_lang) else f"{base_speaker}.wav"
                 if not os.path.exists(speaker_file): speaker_file = "voce_rif_female.wav"
                 
-                text_elaborato = text.replace("—", "... ").replace("  ", " ")
+                text_elaborato = pulisci_testo_per_tts(text)
                 frasi_sicure = dividi_testo_xtts(text_elaborato)
                 frasi_da_sintetizzare = [f for f in frasi_sicure if f != "___PAUSA_PARAGRAFO___" and f.strip()]
                 tot = max(1, len(frasi_da_sintetizzare))
@@ -465,8 +493,8 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                     if i < len(frasi_sicure) - 1 and ("casa" in frase.lower() or "uno" in frase.lower()) and i >= 1: 
                         is_interrotta = True
 
-                    frase_magica = frase.replace("...", "___PUNTINI___").replace(".", ";").replace("___PUNTINI___", "...")
-                    audio_array = tts.tts(text=frase_magica, speaker_wav=speaker_file, language=lang_xtts)
+                    frase_audio = frase.strip()
+                    audio_array = tts.tts(text=frase_audio, speaker_wav=speaker_file, language=lang_xtts)
                     audio_completo.extend(audio_array)
                     
                     durata_pausa = 0.01 if is_interrotta else (0.3 if is_dialogo else (0.2 if (is_esclamativa or is_interrogativa) else 0.15))
