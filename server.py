@@ -72,8 +72,8 @@ def pulisci_testo_per_tts(testo):
     # 2. Normalizza trattini ed em-dash
     testo = testo.replace('—', ' - ').replace('–', ' - ')
     
-    # 3. Normalizza barre (es. stesso/a -> stesso)
-    testo = testo.replace('stesso/a', 'stesso')
+    # 3. Normalizza barre (es. pronto/a -> pronto, stesso/a -> stesso)
+    testo = re.sub(r'\b(\w+)/[a-zA-Z]\b', r'\1', testo)
     testo = testo.replace('/', ' ')
     
     # 4. Normalizza virgolette e caratteri spagnoli/estranei
@@ -124,10 +124,11 @@ def dividi_testo_xtts(testo, limite=180):
                     frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
                 
                 if len(frase) > limite:
-                    # 3. AGGIUNTE VIRGOLE E PAUSE ASIATICHE (，、；：) PER I TAGLI D'EMERGENZA
-                    sub_frasi = re.split(r'(?<=[,;:”»"’\'-，、；：])\s*', frase)
+                    # 3. Taglio di emergenza per frasi lunghe SOLO su virgole, punti e virgola, trattini
+                    sub_frasi = re.split(r'(?<=[,;:，、；：—–\-])\s*', frase)
                     sub_chunk = ""
                     for sub in sub_frasi:
+                        if not sub.strip(): continue
                         if len(sub_chunk) + len(sub) <= limite:
                             sub_chunk += sub + " "
                         else:
