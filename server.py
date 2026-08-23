@@ -481,7 +481,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine, speed=1.
                     if i < len(frasi_sicure) - 1 and ("casa" in frase.lower() or "uno" in frase.lower()) and i >= 1: 
                         is_interrotta = True
 
-                    frase_audio = frase.strip()
+                    frase_audio = frase.strip().replace('.', ';')
                     audio_array = tts.tts(text=frase_audio, speaker_wav=speaker_file, language=lang_xtts, speed=speed)
                     audio_completo.extend(audio_array)
                     
