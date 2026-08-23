@@ -64,22 +64,6 @@ def applica_glossario(testo):
         testo = re.sub(r'\b' + originale + r'\b', tradotto, testo)
     return testo
 
-def correggi_pronuncia(testo):
-    dizionario = {
-        "Beau": "Bo", "Edythe": "Edith", "Cullen": "Callen",
-        "Marty": "Marti", "Charlie": "Ciarli", "Carine": "Carin",
-        "Earnest": "Ernest", "Archie": "Arci", "Edy": "Edi",
-        "McKayla": "Macheila", "Jeremy": "Geremi", "Taylor": "Teilor",
-        "Logan": "Loghan", "Jessamine": "Gessamin", "Royal": "Roial",
-        "Eleanor": "Elenor", "Joss": "Gioss", "Phil": "Fil",
-        "Newton": "Niuton", "Forks": "Forcs", "Washington": "Uoscington",
-        "Seattle": "Siattol", "Chevy": "Scevi", "Sox": "Socs",
-        "Mariners": "Meriners", "American Spirit": "American Spirit"
-    }
-    for scritta, letta in dizionario.items():
-        testo = re.sub(r'\b' + scritta + r'\b', letta, testo)
-    return testo
-
 def dividi_testo_xtts(testo, limite=180):
     paragrafi = [p.strip() for p in testo.split('\n') if p.strip()]
     frammenti_finali = []
@@ -418,8 +402,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                     audio_jobs[job_id]["pct"] = pct
                     audio_jobs[job_id]["msg"] = "Generazione audio in corso..."
                     
-                    frase_pulita = correggi_pronuncia(frase)
-                    generator = pipeline(frase_pulita, voice=voice, speed=1.0, split_pattern='')
+                    generator = pipeline(frase, voice=voice, speed=1.0, split_pattern='')
                     for _, _, audio in generator:
                         audio_completo.extend(audio)
                     
