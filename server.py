@@ -22,6 +22,14 @@ from bs4 import BeautifulSoup
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 
+# Monkey-patch per compatibilità XTTS con transformers recenti
+try:
+    import transformers.pytorch_utils
+    if not hasattr(transformers.pytorch_utils, "isin_mps_friendly"):
+        transformers.pytorch_utils.isin_mps_friendly = lambda elements, test_elements: torch.isin(elements, test_elements)
+except Exception:
+    pass
+
 app = Flask(__name__)
 CORS(app)
 
@@ -176,8 +184,9 @@ def get_kokoro(lang_code):
         print(f"⏳ Caricamento del motore Kokoro per la lingua '{lang_code}'...")
         try:
             from kokoro import KPipeline
-        except ImportError as e:
-            raise Exception("Libreria 'kokoro' non trovata. Esegui la Cella 1 del Notebook Colab per installare 'kokoro'.")
+        except Exception as e:
+            print(f"❌ Errore importazione kokoro: {repr(e)}")
+            raise Exception(f"Errore importazione kokoro: {repr(e)}")
         kokoro_pipelines[lang_code] = KPipeline(lang_code=lang_code)
         print(f"✅ Kokoro '{lang_code}' caricato!")
     return kokoro_pipelines[lang_code]
