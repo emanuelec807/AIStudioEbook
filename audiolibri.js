@@ -235,8 +235,8 @@ function aggiungiCapitolo(datiEsistenti = null) {
                             <span class="material-symbols-outlined" style="font-size: 16px;">upload</span> Carica Voce (.wav)
                         </button>
                     </div>
-                    <div style="font-size: 11px; color: var(--md-sys-color-outline); margin-top: 4px;">
-                        💡 <em>Suggerimento:</em> Caricare un file .wav con una durata consigliata dai <strong>6 ai 12 secondi</strong>.
+                    <div style="font-size: 11.5px; color: var(--md-sys-color-on-surface-variant); margin-top: 6px; line-height: 1.45; background: rgba(var(--md-sys-color-primary-rgb, 100, 100, 255), 0.06); padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--md-sys-color-primary);">
+                        💡 <strong>Consiglio & Disclaimer XTTSv2:</strong> Le due voci predefinite (Maschile / Femminile) sono campioni base non registrati al top. Per una resa ottimale, fluida e naturale, vi consigliamo di caricare una vostra voce personalizzata (file <strong>.wav</strong> pulito e senza rumori di fondo, dai <strong>6 ai 12 secondi</strong>).
                     </div>
                     <div id="status-clone-file-${id}" style="font-size: 12px; margin-top: 4px; color: var(--md-sys-color-primary); font-weight: 500;"></div>
                 </div>
