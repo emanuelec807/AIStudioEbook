@@ -319,8 +319,8 @@ async function richiediTraduzione(id) {
                     if (data.type === 'progress') {
                         progFill.style.width = `${data.percent}%`;
                         progPct.innerText = `${data.percent}%`;
-                        progMsg.innerText = data.msg || 'Traduzione in corso...';
-                        statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> ${data.msg}`;
+                        progMsg.innerText = 'Traduzione in corso...';
+                        statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Traduzione in corso...`;
                     } else if (data.type === 'done') {
                         translatedResult = data.translated_text;
                         progFill.style.width = '100%';
@@ -369,12 +369,12 @@ async function generaAudio(id) {
 
     if (!testo || !testo.trim()) return alert("Il testo per l'audio è vuoto!");
 
-    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Avvio generazione...`;
+    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Generazione audio in corso...`;
     playerDiv.innerHTML = "";
     progBox.style.display = 'block';
     progFill.style.width = '5%';
     progPct.innerText = '5%';
-    progMsg.innerText = "Inizializzazione sintetizzatore...";
+    progMsg.innerText = "Generazione audio in corso...";
 
     const engine = document.getElementById('kokoro').checked ? 'kokoro' : 'xtts';
 
@@ -404,8 +404,8 @@ async function generaAudio(id) {
                 if (job.status === 'processing' || job.status === 'pending') {
                     progFill.style.width = `${job.pct}%`;
                     progPct.innerText = `${job.pct}%`;
-                    progMsg.innerText = job.msg || 'Sintesi vocale in corso...';
-                    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> ${job.msg}`;
+                    progMsg.innerText = 'Generazione audio in corso...';
+                    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Generazione audio in corso...`;
                 } else if (job.status === 'completed') {
                     clearInterval(pollTimer);
                     progFill.style.width = '100%';
@@ -774,7 +774,7 @@ async function avviaAudiolibroCompleto() {
                 if (job.status === 'processing' || job.status === 'pending') {
                     if (fillEl) fillEl.style.width = `${job.pct}%`;
                     if (pctEl) pctEl.innerText = `${job.pct}%`;
-                    if (msgEl) msgEl.innerText = job.msg || 'Sintesi vocale in corso...';
+                    if (msgEl) msgEl.innerText = 'Generazione audiolibro in corso...';
                 } else if (job.status === 'completed') {
                     clearInterval(pollTimer);
                     const audioUrl = `${API_BASE}/${job.audio_url}`;

@@ -276,7 +276,7 @@ def translate_text():
                     chunks.append(current_chunk.strip())
 
                 total_chunks = max(1, len(chunks))
-                yield json.dumps({"type": "progress", "percent": 5, "current": 0, "total": total_chunks, "msg": f"Avvio traduzione con {model_scelto.upper()}..."}) + "\n"
+                yield json.dumps({"type": "progress", "percent": 5, "current": 0, "total": total_chunks, "msg": "Traduzione in corso..."}) + "\n"
 
                 ollama_url = "http://127.0.0.1:11434"
                 try:
@@ -293,7 +293,7 @@ def translate_text():
 
                 for i, chunk in enumerate(chunks):
                     pct = int(((i) / total_chunks) * 90) + 5
-                    yield json.dumps({"type": "progress", "percent": pct, "current": i + 1, "total": total_chunks, "msg": f"Traduzione: Blocco {i+1} di {total_chunks} ({pct}%)"}) + "\n"
+                    yield json.dumps({"type": "progress", "percent": pct, "current": i + 1, "total": total_chunks, "msg": "Traduzione in corso..."}) + "\n"
 
                     prompt_gemma = (
                         f"<start_of_turn>user\n"
@@ -390,7 +390,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                     pct = int((frasi_count / tot) * 90) + 5
                     audio_jobs[job_id]["current"] = frasi_count
                     audio_jobs[job_id]["pct"] = pct
-                    audio_jobs[job_id]["msg"] = f"Kokoro: Frase {frasi_count} di {tot} ({pct}%)"
+                    audio_jobs[job_id]["msg"] = "Generazione audio in corso..."
                     
                     frase_pulita = correggi_pronuncia(frase)
                     generator = pipeline(frase_pulita, voice=voice, speed=1.0, split_pattern='')
@@ -446,7 +446,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                     pct = int((frasi_count / tot) * 90) + 5
                     audio_jobs[job_id]["current"] = frasi_count
                     audio_jobs[job_id]["pct"] = pct
-                    audio_jobs[job_id]["msg"] = f"XTTSv2: Frase {frasi_count} di {tot} ({pct}%)"
+                    audio_jobs[job_id]["msg"] = "Generazione audio in corso..."
                     
                     is_esclamativa = '!' in frase
                     is_interrogativa = '?' in frase
