@@ -236,6 +236,18 @@
         </button>
     </div>
 
+    <div id="first-load-banner" style="margin: 12px 24px 0 24px; padding: 10px 16px; background-color: var(--md-sys-color-surface-container-high); border: 1px solid var(--md-sys-color-outline-variant); border-left: 4px solid var(--md-sys-color-primary); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--md-sys-color-on-surface-variant); line-height: 1.4;">
+            <span class="material-symbols-outlined" style="color: var(--md-sys-color-primary); font-size: 22px;">info</span>
+            <span>
+                <strong>Nota di primo avvio:</strong> Alla prima traduzione o generazione audio, l'avvio potrebbe richiedere qualche secondo in più (~10-15s) per caricare i modelli AI nella memoria della GPU. Tutte le generazioni successive saranno immediate.
+            </span>
+        </div>
+        <button onclick="document.getElementById('first-load-banner').style.display='none'" style="background: none; border: none; cursor: pointer; color: var(--md-sys-color-outline); padding: 4px; display: flex; align-items: center; justify-content: center; border-radius: 50%;" title="Chiudi avviso">
+            <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+        </button>
+    </div>
+
     <div class="board" id="chaptersContainer">
         <button class="add-card-btn" onclick="aggiungiCapitolo()">
             <span class="material-symbols-outlined">add_circle</span>
