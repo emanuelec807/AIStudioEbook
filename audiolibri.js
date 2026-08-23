@@ -78,11 +78,33 @@ function aggiornaInterfacciaGlobale() {
                 <option value="xtts_male">Preset Maschile (voce_rif_male.wav)</option>
                 <option value="xtts_custom">Voice Clone (Voce Caricata)</option>
             `;
-            if(!voceAttuale.includes('xtts')) datiCapitoli[id].voce = 'xtts_female';
-        }
-        
         select.value = datiCapitoli[id].voce;
+        
+        // Aggiorna visibilità del box Voice Clone sotto Genera Audio
+        const cloneBox = document.getElementById(`voice-clone-container-${id}`);
+        if (cloneBox) {
+            if (!isKokoro && !isQwen && datiCapitoli[id].voce === 'xtts_custom') {
+                cloneBox.style.display = 'block';
+            } else {
+                cloneBox.style.display = 'none';
+            }
+        }
     });
+}
+
+function cambiaVoceCapitolo(id, value) {
+    if (datiCapitoli[id]) {
+        datiCapitoli[id].voce = value;
+    }
+    const cloneBox = document.getElementById(`voice-clone-container-${id}`);
+    if (cloneBox) {
+        const isXtts = document.getElementById('xtts') && document.getElementById('xtts').checked;
+        if (isXtts && value === 'xtts_custom') {
+            cloneBox.style.display = 'block';
+        } else {
+            cloneBox.style.display = 'none';
+        }
+    }
 }
 
 function salvaTestoCorrente(id) {
@@ -184,11 +206,24 @@ function aggiungiCapitolo(datiEsistenti = null) {
                 <div class="action-row">
                     <div class="md-text-field" style="width: auto; background: transparent; border: none; padding: 0;">
                         <label>Voce:</label>
-                        <select id="voice-select-${id}" class="voice-select-dynamic" data-chapter-id="${id}" onchange="datiCapitoli[${id}].voce = this.value" style="border-bottom: 1px solid var(--md-sys-color-outline-variant); padding-bottom: 4px;"></select>
+                        <select id="voice-select-${id}" class="voice-select-dynamic" data-chapter-id="${id}" onchange="cambiaVoceCapitolo(${id}, this.value)" style="border-bottom: 1px solid var(--md-sys-color-outline-variant); padding-bottom: 4px;"></select>
                     </div>
                     <button id="btn-genera-${id}" class="md-btn md-btn-primary" onclick="generaAudio(${id})">
                         <span class="material-symbols-outlined">record_voice_over</span> Genera Audio
                     </button>
+                </div>
+                
+                <div id="voice-clone-container-${id}" style="display: none; margin-top: 10px; padding: 10px 14px; background-color: var(--md-sys-color-surface-container-high); border-radius: 8px; border: 1px dashed var(--md-sys-color-outline);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                        <span style="font-size: 13px; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center;">
+                            <span class="material-symbols-outlined" style="font-size: 18px; margin-right: 6px; color: var(--md-sys-color-primary);">mic</span> File di riferimento (.wav):
+                        </span>
+                        <input type="file" id="xtts-voice-file-${id}" style="display:none;" accept=".wav" onchange="caricaVocePersonalizzata(event, ${id})">
+                        <button class="md-btn md-btn-tonal" style="padding: 6px 14px; font-size: 12px;" onclick="document.getElementById('xtts-voice-file-${id}').click()">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">upload</span> Carica Voce (.wav)
+                        </button>
+                    </div>
+                    <div id="status-clone-file-${id}" style="font-size: 12px; margin-top: 4px; color: var(--md-sys-color-primary); font-weight: 500;"></div>
                 </div>
                 
                 <div id="status-audio-${id}" class="status-text"></div>
@@ -707,14 +742,15 @@ async function avviaAudiolibroCompleto() {
     }
 }
 
-async function caricaVocePersonalizzata(event) {
+async function caricaVocePersonalizzata(event, id = null) {
     const file = event.target.files[0];
     if (!file) return;
 
     const formData = new FormData();
     formData.append('file', file);
 
-    alert("Caricamento della voce personalizzata XTTS in corso...");
+    const statusEl = id ? document.getElementById(`status-clone-file-${id}`) : null;
+    if (statusEl) statusEl.innerHTML = `⏳ Caricamento di <em>${file.name}</em>...`;
 
     try {
         const response = await fetch(`${API_BASE}/upload_voice`, {
@@ -729,17 +765,17 @@ async function caricaVocePersonalizzata(event) {
         const data = await response.json();
         if (data.error) throw new Error(data.error);
 
-        alert("✅ File per Voice Clone caricato con successo (voce_rif_custom.wav)!\nIl motore XTTSv2 è stato impostato su 'Voice Clone (Voce Caricata)'.");
-        
-        // Seleziona automaticamente XTTSv2 e imposta la voce su xtts_custom su tutti i blocchi
-        document.getElementById('xtts').checked = true;
-        Object.keys(datiCapitoli).forEach(id => {
-            datiCapitoli[id].voce = 'xtts_custom';
+        // Aggiorna lo stato in tutti i box clone attivi
+        document.querySelectorAll('[id^="status-clone-file-"]').forEach(el => {
+            el.innerHTML = `✅ Voce di riferimento caricata: <strong>${file.name}</strong>`;
         });
-        aggiornaInterfacciaGlobale();
         
     } catch (err) {
-        alert("Errore durante il caricamento della voce: " + err.message);
+        if (statusEl) {
+            statusEl.innerHTML = `<span style="color: var(--md-sys-color-error);">❌ Errore: ${err.message}</span>`;
+        } else {
+            alert("Errore durante il caricamento della voce: " + err.message);
+        }
         console.error(err);
     }
 
