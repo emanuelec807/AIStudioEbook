@@ -78,6 +78,11 @@ function aggiornaInterfacciaGlobale() {
                 <option value="xtts_male">Preset Maschile (voce_rif_male.wav)</option>
                 <option value="xtts_custom">Voice Clone (Voce Caricata)</option>
             `;
+            if (!voceAttuale || !voceAttuale.includes('xtts')) {
+                datiCapitoli[id].voce = 'xtts_female';
+            }
+        }
+        
         select.value = datiCapitoli[id].voce;
         
         // Aggiorna visibilità del box Voice Clone sotto Genera Audio
