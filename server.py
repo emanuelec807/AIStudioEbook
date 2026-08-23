@@ -264,6 +264,18 @@ def translate_text():
 
             traduzione_finale = []
 
+            # Verifica connessione ad Ollama su 127.0.0.1 (IPv4)
+            ollama_url = "http://127.0.0.1:11434"
+            try:
+                requests.get(ollama_url, timeout=1)
+            except Exception:
+                try:
+                    import subprocess
+                    subprocess.Popen(["ollama", "serve"], stdout=open("ollama.log", "a"), stderr=open("ollama.log", "a"))
+                    time.sleep(3)
+                except Exception:
+                    pass
+
             # Traduzione tramite Ollama (TranslateGemma)
             for i, chunk in enumerate(chunks):
                 print(f"\n--- [ Blocco {i+1} di {len(chunks)} ] ---")
@@ -283,7 +295,7 @@ def translate_text():
                 
                 contesto_memoria = 4096 if "12b" in model_scelto else 8192
 
-                response = requests.post("http://localhost:11434/api/generate", json={
+                response = requests.post(f"{ollama_url}/api/generate", json={
                     "model": model_scelto,
                     "prompt": prompt_gemma,
                     "stream": True,
