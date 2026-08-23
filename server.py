@@ -66,7 +66,7 @@ def applica_glossario(testo):
 
 def pulisci_testo_per_tts(testo):
     if not testo: return ""
-    # 1. Rimuovi simboli markdown che mandano in crash o spelling il TTS (*corsivo*, **grassetto**, _sottolineato_)
+    # 1. Rimuovi simboli markdown (*corsivo*, **grassetto**, _sottolineato_)
     testo = re.sub(r'[*_~`]', '', testo)
     
     # 2. Normalizza trattini ed em-dash
@@ -86,7 +86,17 @@ def pulisci_testo_per_tts(testo):
     testo = re.sub(r'\bDr\.\s*', 'Dottor ', testo)
     testo = re.sub(r'\bProf\.\s*', 'Professore ', testo)
     
-    # 6. Spazi multipli
+    # 6. Rimuovi spazi prima dei punti e della punteggiatura (es. 'io .' -> 'io.')
+    #    Questo impedisce al modello di pronunciare la parola 'punto'!
+    testo = re.sub(r'\s+([.,;:!?])', r'\1', testo)
+    
+    # 7. Converti puntini doppi o tripli ('..' o '...') in punto singolo '.'
+    testo = re.sub(r'\.{2,}', '.', testo)
+    
+    # 8. Rimuovi punti residui a inizio frase o dopo virgolette (es. '".' o '^.')
+    testo = re.sub(r'(^|["\n\s])\.\s*', r'\1', testo)
+    
+    # 9. Spazi multipli
     testo = re.sub(r'[ \t]+', ' ', testo)
     return testo
 
@@ -389,7 +399,7 @@ def translate_text():
     return Response(stream_with_context(generate_stream()), mimetype='application/x-ndjson')
 
 # --- MOTORE ASINCRONO CON PERCENTUALE LIVE PER AUDIO (XTTS & KOKORO) ---
-def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
+def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine, speed=1.0):
     with audio_lock:
         try:
             audio_jobs[job_id] = {
@@ -397,7 +407,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                 "current": 0,
                 "total": 1,
                 "pct": 5,
-                "msg": f"Inizializzazione {engine.upper()}...",
+                "msg": "Caricamento modello audio...",
                 "audio_url": None,
                 "error": None
             }
@@ -431,7 +441,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                     audio_jobs[job_id]["pct"] = pct
                     audio_jobs[job_id]["msg"] = "Generazione audio in corso..."
                     
-                    generator = pipeline(frase, voice=voice, speed=1.0, split_pattern='')
+                    generator = pipeline(frase, voice=voice, speed=speed, split_pattern='')
                     for _, _, audio in generator:
                         audio_completo.extend(audio)
                     
@@ -495,7 +505,7 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                         is_interrotta = True
 
                     frase_audio = frase.strip()
-                    audio_array = tts.tts(text=frase_audio, speaker_wav=speaker_file, language=lang_xtts)
+                    audio_array = tts.tts(text=frase_audio, speaker_wav=speaker_file, language=lang_xtts, speed=speed)
                     audio_completo.extend(audio_array)
                     
                     durata_pausa = 0.01 if is_interrotta else (0.3 if is_dialogo else (0.2 if (is_esclamativa or is_interrogativa) else 0.15))
@@ -531,6 +541,7 @@ def generate_audio_job():
     cap_id = data.get('capitolo_id', 'Singolo')
     lang = data.get('lang', 'it')
     engine = data.get('engine', 'xtts')
+    speed = float(data.get('speed', 1.0))
     
     if not text.strip():
         return jsonify({"error": "Testo vuoto"}), 400
@@ -546,7 +557,7 @@ def generate_audio_job():
         "error": None
     }
     
-    t = Thread(target=esegui_generazione_audio, args=(job_id, text, voice, cap_id, lang, engine))
+    t = Thread(target=esegui_generazione_audio, args=(job_id, text, voice, cap_id, lang, engine, speed))
     t.daemon = True
     t.start()
     
