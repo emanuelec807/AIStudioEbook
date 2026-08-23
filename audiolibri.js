@@ -204,6 +204,13 @@ function aggiungiCapitolo(datiEsistenti = null) {
                         <span class="material-symbols-outlined">translate</span> Traduci
                     </button>
                 </div>
+                <div id="progress-box-trad-${id}" class="progress-box">
+                    <div class="progress-track"><div id="progress-fill-trad-${id}" class="progress-fill"></div></div>
+                    <div class="progress-meta">
+                        <span id="progress-msg-trad-${id}">Traduzione in corso...</span>
+                        <span id="progress-pct-trad-${id}">0%</span>
+                    </div>
+                </div>
                 <div id="status-trad-${id}" class="status-text"></div>
             </div>
 
@@ -234,6 +241,13 @@ function aggiungiCapitolo(datiEsistenti = null) {
                     <div id="status-clone-file-${id}" style="font-size: 12px; margin-top: 4px; color: var(--md-sys-color-primary); font-weight: 500;"></div>
                 </div>
                 
+                <div id="progress-box-audio-${id}" class="progress-box">
+                    <div class="progress-track"><div id="progress-fill-audio-${id}" class="progress-fill"></div></div>
+                    <div class="progress-meta">
+                        <span id="progress-msg-audio-${id}">Generazione audio...</span>
+                        <span id="progress-pct-audio-${id}">0%</span>
+                    </div>
+                </div>
                 <div id="status-audio-${id}" class="status-text"></div>
                 <div id="audio-player-${id}" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
@@ -261,10 +275,18 @@ async function richiediTraduzione(id) {
     const testoSorgente = datiCapitoli[id].testi[linguaSorgente];
     const modelloLLM = document.querySelector('input[name="llm_model"]:checked').value;
     const statusDiv = document.getElementById(`status-trad-${id}`);
+    const progBox = document.getElementById(`progress-box-trad-${id}`);
+    const progFill = document.getElementById(`progress-fill-trad-${id}`);
+    const progMsg = document.getElementById(`progress-msg-trad-${id}`);
+    const progPct = document.getElementById(`progress-pct-trad-${id}`);
 
     if (!testoSorgente || !testoSorgente.trim()) return alert(`Il testo in ${linguaSorgente.toUpperCase()} è vuoto!`);
     
-    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Traduzione in corso...`;
+    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Inizializzazione traduzione...`;
+    progBox.style.display = 'block';
+    progFill.style.width = '5%';
+    progPct.innerText = '5%';
+    progMsg.innerText = `Avvio traduzione con ${modelloLLM}...`;
 
     try {
         const response = await fetch(`${API_BASE}/translate`, {
@@ -273,21 +295,62 @@ async function richiediTraduzione(id) {
             body: JSON.stringify({ text: testoSorgente, src_lang: linguaSorgente, tgt_lang: linguaDestinazione, model: modelloLLM })
         });
 
-        const data = await response.json();
-        if (data.translated_text) {
-            datiCapitoli[id].testi[linguaDestinazione] = data.translated_text;
+        if (!response.ok && !response.body) {
+            throw new Error(`Errore server HTTP ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let translatedResult = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const data = JSON.parse(line);
+                    if (data.type === 'progress') {
+                        progFill.style.width = `${data.percent}%`;
+                        progPct.innerText = `${data.percent}%`;
+                        progMsg.innerText = data.msg || 'Traduzione in corso...';
+                        statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> ${data.msg}`;
+                    } else if (data.type === 'done') {
+                        translatedResult = data.translated_text;
+                        progFill.style.width = '100%';
+                        progPct.innerText = '100%';
+                        progMsg.innerText = 'Traduzione completata!';
+                    } else if (data.type === 'error') {
+                        throw new Error(data.error);
+                    }
+                } catch (e) {
+                    if (e.message && !e.message.includes('JSON')) throw e;
+                }
+            }
+        }
+
+        if (translatedResult) {
+            datiCapitoli[id].testi[linguaDestinazione] = translatedResult;
             statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-primary);">check_circle</span> Tradotto in ${linguaDestinazione.toUpperCase()}`;
             
             if (datiCapitoli[id].linguaAttiva === linguaDestinazione) {
-                document.getElementById(`testo-${id}`).value = data.translated_text;
+                document.getElementById(`testo-${id}`).value = translatedResult;
             } else {
                 cambiaLingua(id, linguaDestinazione);
             }
+            setTimeout(() => { progBox.style.display = 'none'; }, 2000);
         } else {
-            throw new Error(data.error);
+            throw new Error("Risposta incompleta dal server");
         }
     } catch (error) {
         statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">error</span> Errore: ${error.message}`;
+        progBox.style.display = 'none';
     }
 }
 
@@ -299,27 +362,24 @@ async function generaAudio(id) {
     
     const statusDiv = document.getElementById(`status-audio-${id}`);
     const playerDiv = document.getElementById(`audio-player-${id}`);
+    const progBox = document.getElementById(`progress-box-audio-${id}`);
+    const progFill = document.getElementById(`progress-fill-audio-${id}`);
+    const progMsg = document.getElementById(`progress-msg-audio-${id}`);
+    const progPct = document.getElementById(`progress-pct-audio-${id}`);
 
     if (!testo || !testo.trim()) return alert("Il testo per l'audio è vuoto!");
 
-    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Generazione in corso...`;
-    playerDiv.innerHTML = ""; 
+    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Avvio generazione...`;
+    playerDiv.innerHTML = "";
+    progBox.style.display = 'block';
+    progFill.style.width = '5%';
+    progPct.innerText = '5%';
+    progMsg.innerText = "Inizializzazione sintetizzatore...";
 
-    let endpoint = '/generate_xtts';
-    let qwenVersion = '0.6b';
-
-    if (document.getElementById('kokoro').checked) {
-        endpoint = '/generate_kokoro';
-    } else if (document.getElementById('qwen_tts_06') && document.getElementById('qwen_tts_06').checked) {
-        endpoint = '/generate_qwen_tts';
-        qwenVersion = '0.6b';
-    } else if (document.getElementById('qwen_tts_17') && document.getElementById('qwen_tts_17').checked) {
-        endpoint = '/generate_qwen_tts';
-        qwenVersion = '1.7b';
-    }
+    const engine = document.getElementById('kokoro').checked ? 'kokoro' : 'xtts';
 
     try {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
+        const startRes = await fetch(`${API_BASE}/generate_audio_job`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -327,23 +387,52 @@ async function generaAudio(id) {
                 voice: voceScelta, 
                 capitolo_id: id, 
                 lang: linguaAttiva,
-                qwen_version: qwenVersion
+                engine: engine
             })
         });
 
-        if (!response.ok) throw new Error("Errore nel server Python");
-        
-        const blob = await response.blob();
-        const audioUrl = URL.createObjectURL(blob);
+        if (!startRes.ok) throw new Error("Impossibile avviare il processo audio sul server");
+        const { job_id } = await startRes.json();
 
-        statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-primary);">task_alt</span> Audio e MP3 salvati sul Server!`;
-        playerDiv.innerHTML = `
-            <audio controls><source src="${audioUrl}" type="audio/wav"></audio>
-            <a href="${audioUrl}" download="Capitolo_${id}_${linguaAttiva}.wav" class="md-btn md-btn-tonal" style="text-decoration:none;">
-                <span class="material-symbols-outlined">download</span> Scarica .WAV
-            </a>
-        `;
+        // Polling del progresso ogni 800ms
+        const pollTimer = setInterval(async () => {
+            try {
+                const progRes = await fetch(`${API_BASE}/audio_progress/${job_id}`);
+                if (!progRes.ok) return;
+                const job = await progRes.json();
+
+                if (job.status === 'processing' || job.status === 'pending') {
+                    progFill.style.width = `${job.pct}%`;
+                    progPct.innerText = `${job.pct}%`;
+                    progMsg.innerText = job.msg || 'Sintesi vocale in corso...';
+                    statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> ${job.msg}`;
+                } else if (job.status === 'completed') {
+                    clearInterval(pollTimer);
+                    progFill.style.width = '100%';
+                    progPct.innerText = '100%';
+                    progMsg.innerText = 'Audio generato!';
+                    
+                    statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-primary);">task_alt</span> Audio e MP3 pronti!`;
+                    const audioUrl = `${API_BASE}/${job.audio_url}`;
+                    playerDiv.innerHTML = `
+                        <audio controls><source src="${audioUrl}" type="audio/wav"></audio>
+                        <a href="${audioUrl}" download="Capitolo_${id}_${linguaAttiva}.wav" class="md-btn md-btn-tonal" style="text-decoration:none;">
+                            <span class="material-symbols-outlined">download</span> Scarica .WAV
+                        </a>
+                    `;
+                    setTimeout(() => { progBox.style.display = 'none'; }, 2000);
+                } else if (job.status === 'error') {
+                    clearInterval(pollTimer);
+                    progBox.style.display = 'none';
+                    statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">error</span> Errore: ${job.error}`;
+                }
+            } catch (pollErr) {
+                console.error("Polling error:", pollErr);
+            }
+        }, 800);
+
     } catch (error) {
+        progBox.style.display = 'none';
         statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">error</span> Errore: ${error.message}`;
     }
 }
@@ -552,77 +641,28 @@ function chiudiModaleBatch() {
 }
 
 async function avviaCodaAudio() {
-    const linguaScelta = document.getElementById('batch-lang').value;
-    const voceSceltaDalBatch = document.getElementById('batch-voice').value;
     const checkboxes = document.querySelectorAll('.batch-checkbox:checked');
     const idsToProcess = Array.from(checkboxes).map(cb => cb.value);
     
     if(idsToProcess.length === 0) return alert("Seleziona almeno un capitolo!");
 
     chiudiModaleBatch();
-    alert(`Inizio generazione in coda (${linguaScelta.toUpperCase()})...`);
 
     for (let i = 0; i < idsToProcess.length; i++) {
         const id = idsToProcess[i];
-        let endpoint = '/generate_xtts';
-        let qwenVersion = '0.6b';
-
-        if (document.getElementById('kokoro').checked) {
-            endpoint = '/generate_kokoro';
-        } else if (document.getElementById('qwen_tts_06') && document.getElementById('qwen_tts_06').checked) {
-            endpoint = '/generate_qwen_tts';
-            qwenVersion = '0.6b';
-        } else if (document.getElementById('qwen_tts_17') && document.getElementById('qwen_tts_17').checked) {
-            endpoint = '/generate_qwen_tts';
-            qwenVersion = '1.7b';
-        }
-
-        const testoDaLeggere = datiCapitoli[id].testi[linguaScelta];
-        const statusDiv = document.getElementById(`status-audio-${id}`);
-
-        if(!testoDaLeggere || !testoDaLeggere.trim()) {
-            if(statusDiv) statusDiv.innerHTML = `Testo vuoto in ${linguaScelta}, saltato.`;
-            continue;
-        }
-
-        if(statusDiv) statusDiv.innerHTML = `In coda batch...`;
-
-        try {
-            const response = await fetch(`${API_BASE}${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    text: testoDaLeggere, 
-                    voice: voceSceltaDalBatch, 
-                    capitolo_id: id, 
-                    lang: linguaScelta,
-                    qwen_version: qwenVersion 
-                })
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const audioUrl = URL.createObjectURL(blob);
+        await new Promise((resolve) => {
+            generaAudio(id);
+            // Controlla ogni secondo se il capitolo corrente ha completato l'audio prima di passare al successivo
+            const checkDone = setInterval(() => {
+                const progBox = document.getElementById(`progress-box-audio-${id}`);
                 const playerDiv = document.getElementById(`audio-player-${id}`);
-                
-                if(statusDiv) statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-primary);">task_alt</span> Generato (Batch)!`;
-                if(playerDiv) {
-                    playerDiv.innerHTML = `
-                        <audio controls><source src="${audioUrl}" type="audio/wav"></audio>
-                        <a href="${audioUrl}" download="Capitolo_${id}_${linguaScelta}.wav" class="md-btn md-btn-tonal" style="text-decoration:none;">
-                            <span class="material-symbols-outlined">download</span> Scarica .WAV
-                        </a>
-                    `;
+                if (playerDiv && playerDiv.innerHTML.includes('<audio') || (progBox && progBox.style.display === 'none')) {
+                    clearInterval(checkDone);
+                    resolve();
                 }
-            } else {
-                throw new Error("Errore server");
-            }
-        } catch(err) {
-            if(statusDiv) statusDiv.innerHTML = `<span class="material-symbols-outlined" style="color:var(--md-sys-color-error);">error</span> Errore batch: ${err.message}`;
-        }
+            }, 1000);
+        });
     }
-    
-    alert("🎉 Generazione in coda terminata!");
 }
 
 // --- LOGICA AUDIOLIBRO COMPLETO UNIFICATO ---
@@ -684,67 +724,95 @@ async function avviaAudiolibroCompleto() {
 
     modalBody.innerHTML = `
         <div style="text-align: center; padding: 20px;">
-            <h2 style="color: var(--md-sys-color-primary);">⏳ Generazione in corso...</h2>
-            <p>Sto unendo ${conteggioCapitoli} capitoli (${linguaScelta.toUpperCase()}).</p>
-            <div style="margin: 30px 0;">
-                <span class="material-symbols-outlined spin" style="font-size: 64px; color: var(--md-sys-color-primary);">autorenew</span>
+            <h2 style="color: var(--md-sys-color-primary);">⏳ Generazione Audiolibro Intero...</h2>
+            <p>Sto unendo ${conteggioCapitoli} capitoli in un unico master (${linguaScelta.toUpperCase()}).</p>
+            
+            <div style="width: 100%; margin: 24px 0;">
+                <div class="progress-track" style="height: 10px;">
+                    <div id="modal-progress-fill" class="progress-fill" style="width: 5%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 8px; font-weight: 500;">
+                    <span id="modal-progress-msg">Inizializzazione motore audio...</span>
+                    <span id="modal-progress-pct">5%</span>
+                </div>
             </div>
-            <p style="color: var(--md-sys-color-outline); font-size: 14px;">
-                Questa operazione richiederà molto tempo. Lascia questa finestra aperta!
+            
+            <p style="color: var(--md-sys-color-outline); font-size: 13px;">
+                Puoi lasciare questa finestra aperta. L'audio verrà compilato in background senza timeout!
             </p>
         </div>
     `;
 
-    let endpoint = '/generate_xtts';
-    if (document.getElementById('kokoro').checked) {
-        endpoint = '/generate_kokoro';
-    }
+    const engine = document.getElementById('kokoro').checked ? 'kokoro' : 'xtts';
 
     try {
-        const response = await fetch(`${API_BASE}${endpoint}`, {
+        const startRes = await fetch(`${API_BASE}/generate_audio_job`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 text: testoInteroLibro, 
                 voice: voceScelta, 
                 capitolo_id: "INTERO_LIBRO", 
-                lang: linguaScelta
+                lang: linguaScelta,
+                engine: engine
             })
         });
 
-        if (response.ok) {
-            const blob = await response.blob();
-            const audioUrl = URL.createObjectURL(blob);
-            
-            modalBody.innerHTML = `
-                <div style="text-align: center; padding: 20px;">
-                    <h2 style="color: var(--md-sys-color-primary);">🎉 Audiolibro Completato!</h2>
-                    <p style="margin-bottom: 20px;">Il tuo master unico è pronto per il download.</p>
-                    <audio controls src="${audioUrl}" style="width: 100%; margin-bottom: 24px;"></audio>
-                    <div style="display: flex; gap: 12px; justify-content: center;">
-                        <button class="md-btn md-btn-outlined" onclick="location.reload()">Chiudi</button>
-                        <a href="${audioUrl}" download="Audiolibro_Completo_${linguaScelta}.wav" class="md-btn md-btn-primary" style="text-decoration:none;">
-                            <span class="material-symbols-outlined">download</span> Scarica .WAV Unico
-                        </a>
-                    </div>
-                </div>
-            `;
-        } else {
-            modalBody.innerHTML = `
-                <div style="text-align: center; padding: 20px;">
-                    <span class="material-symbols-outlined" style="font-size: 48px; color: var(--md-sys-color-error);">error</span>
-                    <h2>Errore di generazione</h2>
-                    <button class="md-btn md-btn-outlined" style="margin-top: 16px;" onclick="location.reload()">Chiudi</button>
-                </div>
-            `;
-        }
-    } catch (error) {
-        console.error("Errore:", error);
+        if (!startRes.ok) throw new Error("Errore avvio processo");
+        const { job_id } = await startRes.json();
+
+        const fillEl = document.getElementById('modal-progress-fill');
+        const msgEl = document.getElementById('modal-progress-msg');
+        const pctEl = document.getElementById('modal-progress-pct');
+
+        const pollTimer = setInterval(async () => {
+            try {
+                const progRes = await fetch(`${API_BASE}/audio_progress/${job_id}`);
+                if (!progRes.ok) return;
+                const job = await progRes.json();
+
+                if (job.status === 'processing' || job.status === 'pending') {
+                    if (fillEl) fillEl.style.width = `${job.pct}%`;
+                    if (pctEl) pctEl.innerText = `${job.pct}%`;
+                    if (msgEl) msgEl.innerText = job.msg || 'Sintesi vocale in corso...';
+                } else if (job.status === 'completed') {
+                    clearInterval(pollTimer);
+                    const audioUrl = `${API_BASE}/${job.audio_url}`;
+                    
+                    modalBody.innerHTML = `
+                        <div style="text-align: center; padding: 20px;">
+                            <h2 style="color: var(--md-sys-color-primary);">🎉 Audiolibro Completo Generato!</h2>
+                            <p style="margin-bottom: 20px;">Il master unico è pronto per l'ascolto e il download.</p>
+                            <audio controls src="${audioUrl}" style="width: 100%; margin-bottom: 24px;"></audio>
+                            <div style="display: flex; gap: 12px; justify-content: center;">
+                                <button class="md-btn md-btn-outlined" onclick="location.reload()">Chiudi</button>
+                                <a href="${audioUrl}" download="Audiolibro_Completo_${linguaScelta}.wav" class="md-btn md-btn-primary" style="text-decoration:none;">
+                                    <span class="material-symbols-outlined">download</span> Scarica .WAV Unico
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                } else if (job.status === 'error') {
+                    clearInterval(pollTimer);
+                    modalBody.innerHTML = `
+                        <div style="text-align: center; padding: 20px;">
+                            <h2 style="color: var(--md-sys-color-error);">❌ Errore Generazione</h2>
+                            <p style="margin: 16px 0;">${job.error}</p>
+                            <button class="md-btn md-btn-tonal" onclick="location.reload()">Riprova</button>
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                console.error("Audiobook poll error:", e);
+            }
+        }, 1000);
+
+    } catch (err) {
         modalBody.innerHTML = `
             <div style="text-align: center; padding: 20px;">
-                <span class="material-symbols-outlined" style="font-size: 48px; color: var(--md-sys-color-error);">wifi_off</span>
-                <h2>Errore di Connessione</h2>
-                <button class="md-btn md-btn-outlined" style="margin-top: 16px;" onclick="location.reload()">Chiudi</button>
+                <h2 style="color: var(--md-sys-color-error);">❌ Errore</h2>
+                <p style="margin: 16px 0;">${err.message}</p>
+                <button class="md-btn md-btn-tonal" onclick="location.reload()">Chiudi</button>
             </div>
         `;
     }

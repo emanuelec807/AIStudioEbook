@@ -12,14 +12,15 @@ import json
 import re
 import gc
 import requests
-from threading import Lock
+import uuid
+from threading import Lock, Thread
 import numpy as np
 import torch
 import soundfile as sf
 from pydub import AudioSegment
 from ebooklib import epub
 from bs4 import BeautifulSoup
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, send_file, jsonify, Response, stream_with_context
 from flask_cors import CORS
 
 # Monkey-patch per compatibilità totale XTTS con tutte le versioni di transformers
@@ -43,11 +44,12 @@ except Exception:
 app = Flask(__name__)
 CORS(app)
 
-# Global models and locks
+# Global models, locks and job stores
 xtts_model = None
 kokoro_pipelines = {}
 traduzione_lock = Lock()
 audio_lock = Lock()
+audio_jobs = {}
 
 # --- HELPER FUNCTIONS FOR TEXT SPLITTING & PROCESSING ---
 def dividi_testo_xtts(testo, limite=180):
@@ -232,288 +234,309 @@ def upload_voice():
 
 @app.route('/translate', methods=['POST'])
 def translate_text():
-    with traduzione_lock:
-        try:
-            data = request.json
-            text = data.get('text', '')
-            src_lang = data.get('src_lang', 'en')
-            # supporta sia 'tgt_lang' che 'target_lang'
-            tgt_lang = data.get('tgt_lang', data.get('target_lang', 'it'))
-            model_scelto = data.get('model', 'translategemma:12b')
+    data = request.json or {}
+    text = data.get('text', '')
+    src_lang = data.get('src_lang', 'en')
+    tgt_lang = data.get('tgt_lang', data.get('target_lang', 'it'))
+    model_scelto = data.get('model', 'translategemma:12b')
 
-            if not text.strip(): return {"error": "Testo vuoto"}, 400
-            
-            print(f"\n✨ --- TRADUZIONE CON {model_scelto.upper()} ({src_lang.upper()} -> {tgt_lang.upper()}) ---")
-            
-            # Normalizzazione lingua
-            lingua_ricevuta = tgt_lang.strip().lower()
-            mappa_iso = {"italiano": "it", "spagnolo": "es", "francese": "fr", "tedesco": "de", "inglese": "en", "portoghese": "pt"}
-            lingua_iso = mappa_iso.get(lingua_ricevuta, lingua_ricevuta)
+    if not text.strip(): 
+        return jsonify({"error": "Testo vuoto"}), 400
 
-            nomi_estesi = {
-                "it": "Italiano", "es": "Spagnolo", "fr": "Francese", 
-                "de": "Tedesco", "en": "Inglese", "pt": "Portoghese",
-                "ja": "Giapponese", "zh": "Cinese Mandarino", "hi": "Hindi"
-            }
-            nome_lingua_esteso = nomi_estesi.get(lingua_iso, lingua_iso.capitalize())
-
-            # Split in chunks
-            MAX_CHARS = 5000 
-            paragrafi = text.split('\n')
-            chunks = []
-            current_chunk = ""
-
-            for p in paragrafi:
-                if len(current_chunk) + len(p) > MAX_CHARS:
-                    chunks.append(current_chunk.strip())
-                    current_chunk = p + "\n"
-                else:
-                    current_chunk += p + "\n"
-            if current_chunk.strip():
-                chunks.append(current_chunk.strip())
-
-            traduzione_finale = []
-
-            # Verifica connessione ad Ollama su 127.0.0.1 (IPv4)
-            ollama_url = "http://127.0.0.1:11434"
+    def generate_stream():
+        with traduzione_lock:
             try:
-                requests.get(ollama_url, timeout=1)
-            except Exception:
+                print(f"\n✨ --- TRADUZIONE STREAMING CON {model_scelto.upper()} ({src_lang.upper()} -> {tgt_lang.upper()}) ---")
+                
+                # Normalizzazione lingua
+                lingua_ricevuta = tgt_lang.strip().lower()
+                mappa_iso = {"italiano": "it", "spagnolo": "es", "francese": "fr", "tedesco": "de", "inglese": "en", "portoghese": "pt"}
+                lingua_iso = mappa_iso.get(lingua_ricevuta, lingua_ricevuta)
+
+                nomi_estesi = {
+                    "it": "Italiano", "es": "Spagnolo", "fr": "Francese", 
+                    "de": "Tedesco", "en": "Inglese", "pt": "Portoghese",
+                    "ja": "Giapponese", "zh": "Cinese Mandarino", "hi": "Hindi"
+                }
+                nome_lingua_esteso = nomi_estesi.get(lingua_iso, lingua_iso.capitalize())
+
+                # Split in chunks (circa 2500 caratteri per chunk per massima reattività)
+                MAX_CHARS = 2500 
+                paragrafi = text.split('\n')
+                chunks = []
+                current_chunk = ""
+
+                for p in paragrafi:
+                    if len(current_chunk) + len(p) > MAX_CHARS:
+                        chunks.append(current_chunk.strip())
+                        current_chunk = p + "\n"
+                    else:
+                        current_chunk += p + "\n"
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+
+                total_chunks = max(1, len(chunks))
+                yield json.dumps({"type": "progress", "percent": 5, "current": 0, "total": total_chunks, "msg": f"Avvio traduzione con {model_scelto.upper()}..."}) + "\n"
+
+                ollama_url = "http://127.0.0.1:11434"
                 try:
-                    import subprocess
-                    subprocess.Popen(["ollama", "serve"], stdout=open("ollama.log", "a"), stderr=open("ollama.log", "a"))
-                    time.sleep(3)
+                    requests.get(ollama_url, timeout=1)
+                except Exception:
+                    try:
+                        import subprocess
+                        subprocess.Popen(["ollama", "serve"], stdout=open("ollama.log", "a"), stderr=open("ollama.log", "a"))
+                        time.sleep(3)
+                    except Exception:
+                        pass
+
+                traduzione_finale = []
+
+                for i, chunk in enumerate(chunks):
+                    pct = int(((i) / total_chunks) * 90) + 5
+                    yield json.dumps({"type": "progress", "percent": pct, "current": i + 1, "total": total_chunks, "msg": f"Traduzione: Blocco {i+1} di {total_chunks} ({pct}%)"}) + "\n"
+
+                    prompt_gemma = (
+                        f"<start_of_turn>user\n"
+                        f"Translate this text into {nome_lingua_esteso}. "
+                        "Follow these linguistic rules:\n"
+                        "1. CONTEXTUAL REGISTER: Choose between 'tu' (informal) and 'voi' (formal) based on the relationship between characters. "
+                        "Friends, family, and lovers MUST use 'tu'. Use 'voi' only for formal respect or multiple people.\n"
+                        "2. CONSISTENCY: Keep the same register for the same characters throughout the text.\n"
+                        "3. NO DIALOGUE LOOPS: Translate only the provided text. Do not repeat sentences and do not invent new dialogue.\n"
+                        "4. LITERARY STYLE: Maintain the tone and atmosphere of the original prose.\n\n"
+                        f"TEXT:\n{chunk}<end_of_turn>\n"
+                        f"<start_of_turn>model\n"
+                    )
+                    
+                    contesto_memoria = 4096 if "12b" in model_scelto else 8192
+
+                    response = requests.post(f"{ollama_url}/api/generate", json={
+                        "model": model_scelto,
+                        "prompt": prompt_gemma,
+                        "stream": True,
+                        "options": {
+                            "num_ctx": contesto_memoria, 
+                            "temperature": 0.3,
+                            "repeat_penalty": 1.4,
+                            "repeat_last_n": 128,
+                            "top_p": 0.9,
+                            "stop": ["<start_of_turn>", "<end_of_turn>", "user:", "model:"]
+                        }
+                    }, stream=True)
+
+                    blocco_pulito = ""
+                    if response.status_code == 200:
+                        for line in response.iter_lines():
+                            if line:
+                                body = json.loads(line)
+                                parola = body.get("response", "")
+                                if "<start_of_turn>" in parola: break
+                                blocco_pulito += parola
+                        
+                        traduzione_finale.append(blocco_pulito.strip())
+                    else:
+                        raise Exception(f"Errore Ollama: {response.status_code}")
+
+                output_text = "\n\n".join(traduzione_finale)
+                output_text = applica_glossario(output_text)
+                yield json.dumps({"type": "done", "percent": 100, "current": total_chunks, "total": total_chunks, "translated_text": output_text, "msg": "Traduzione completata!"}) + "\n"
+
+            except requests.exceptions.ConnectionError:
+                err_msg = "Impossibile connettersi ad Ollama (porta 11434). Assicurati di aver eseguito la Cella 3 del Notebook su Colab per Ollama e TranslateGemma."
+                print(f"❌ Errore traduzione: {err_msg}")
+                yield json.dumps({"type": "error", "error": err_msg}) + "\n"
+            except Exception as e:
+                print(f"❌ Errore traduzione: {str(e)}")
+                yield json.dumps({"type": "error", "error": str(e)}) + "\n"
+
+    return Response(stream_with_context(generate_stream()), mimetype='application/x-ndjson')
+
+# --- MOTORE ASINCRONO CON PERCENTUALE LIVE PER AUDIO (XTTS & KOKORO) ---
+def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
+    with audio_lock:
+        try:
+            audio_jobs[job_id] = {
+                "status": "processing",
+                "current": 0,
+                "total": 1,
+                "pct": 5,
+                "msg": f"Inizializzazione {engine.upper()}...",
+                "audio_url": None,
+                "error": None
+            }
+            cartella_out = "audiolibri_output"
+            os.makedirs(cartella_out, exist_ok=True)
+
+            if engine == "kokoro":
+                pipeline = get_kokoro(voice[0])
+                output_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_kokoro.wav"
+                mp3_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_kokoro.mp3"
+                
+                frasi = dividi_testo_kokoro(text)
+                frasi_valide = [f.strip() for f in frasi if f.strip() and f != "___PAUSA_PARAGRAFO___"]
+                tot = max(1, len(frasi_valide))
+                audio_jobs[job_id]["total"] = tot
+                
+                audio_completo = []
+                frasi_count = 0
+                
+                for frase in frasi:
+                    if frase == "___PAUSA_PARAGRAFO___":
+                        silenzio = np.zeros(int(24000 * 0.8), dtype=np.float32)
+                        audio_completo.extend(silenzio)
+                        continue
+                    
+                    frasi_count += 1
+                    pct = int((frasi_count / tot) * 90) + 5
+                    audio_jobs[job_id]["current"] = frasi_count
+                    audio_jobs[job_id]["pct"] = pct
+                    audio_jobs[job_id]["msg"] = f"Kokoro: Frase {frasi_count} di {tot} ({pct}%)"
+                    
+                    frase_pulita = correggi_pronuncia(frase)
+                    generator = pipeline(frase_pulita, voice=voice, speed=1.0, split_pattern='')
+                    for _, _, audio in generator:
+                        audio_completo.extend(audio)
+                    
+                    durata_pausa = 0.15 if frase.endswith(',') else 0.2
+                    silenzio = np.zeros(int(24000 * durata_pausa), dtype=np.float32)
+                    audio_completo.extend(silenzio)
+                
+                audio_arr = np.array(audio_completo, dtype=np.float32)
+                max_val = np.max(np.abs(audio_arr))
+                if max_val > 0: audio_arr = audio_arr / max_val
+                sf.write(output_path, audio_arr, 24000, subtype='PCM_16')
+                
+                try:
+                    audio_segment = AudioSegment.from_wav(output_path)
+                    audio_segment.export(mp3_path, format="mp3", bitrate="192k")
                 except Exception:
                     pass
 
-            # Traduzione tramite Ollama (TranslateGemma)
-            for i, chunk in enumerate(chunks):
-                print(f"\n--- [ Blocco {i+1} di {len(chunks)} ] ---")
+            else: # XTTS
+                tts = get_xtts()
+                output_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_xtts.wav"
+                mp3_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_xtts.mp3"
                 
-                prompt_gemma = (
-                    f"<start_of_turn>user\n"
-                    f"Translate this text into {nome_lingua_esteso}. "
-                    "Follow these linguistic rules:\n"
-                    "1. CONTEXTUAL REGISTER: Choose between 'tu' (informal) and 'voi' (formal) based on the relationship between characters. "
-                    "Friends, family, and lovers MUST use 'tu'. Use 'voi' only for formal respect or multiple people.\n"
-                    "2. CONSISTENCY: Keep the same register for the same characters throughout the text.\n"
-                    "3. NO DIALOGUE LOOPS: Translate only the provided text. Do not repeat sentences and do not invent new dialogue.\n"
-                    "4. LITERARY STYLE: Maintain the tone and atmosphere of the original prose.\n\n"
-                    f"TEXT:\n{chunk}<end_of_turn>\n"
-                    f"<start_of_turn>model\n"
-                )
+                if voice == "xtts_male": base_speaker = "voce_rif_male"
+                elif voice == "xtts_female": base_speaker = "voce_rif_female"
+                elif voice == "xtts_custom": base_speaker = "voce_rif_custom"
+                else: base_speaker = "voce_rif"
                 
-                contesto_memoria = 4096 if "12b" in model_scelto else 8192
-
-                response = requests.post(f"{ollama_url}/api/generate", json={
-                    "model": model_scelto,
-                    "prompt": prompt_gemma,
-                    "stream": True,
-                    "options": {
-                        "num_ctx": contesto_memoria, 
-                        "temperature": 0.3,
-                        "repeat_penalty": 1.4,
-                        "repeat_last_n": 128,
-                        "top_p": 0.9,
-                        "stop": ["<start_of_turn>", "<end_of_turn>", "user:", "model:"]
-                    }
-                }, stream=True)
-
-                blocco_pulito = ""
-                if response.status_code == 200:
-                    for line in response.iter_lines():
-                        if line:
-                            body = json.loads(line)
-                            parola = body.get("response", "")
-                            if "<start_of_turn>" in parola: break
-                            blocco_pulito += parola
-                            print(parola, end="", flush=True) 
+                speaker_file_lang = f"{base_speaker}_{lang}.wav"
+                speaker_file = speaker_file_lang if os.path.exists(speaker_file_lang) else f"{base_speaker}.wav"
+                if not os.path.exists(speaker_file): speaker_file = "voce_rif_female.wav"
+                
+                text_elaborato = text.replace("—", "... ").replace("  ", " ")
+                frasi_sicure = dividi_testo_xtts(text_elaborato)
+                frasi_valide = [f.strip() for f in frasi_sicure if len(f.strip()) > 1 and f != "___PAUSA_PARAGRAFO___"]
+                tot = max(1, len(frasi_valide))
+                audio_jobs[job_id]["total"] = tot
+                
+                audio_completo = []
+                frasi_count = 0
+                lang_xtts = "zh-cn" if lang == "zh" else lang
+                
+                for i, frase in enumerate(frasi_sicure):
+                    if frase == "___PAUSA_PARAGRAFO___":
+                        silenzio = np.zeros(int(24000 * 0.6), dtype=np.float32)
+                        audio_completo.extend(silenzio)
+                        continue
                     
-                    traduzione_finale.append(blocco_pulito.strip())
-                    print("\n")
-                else:
-                    raise Exception(f"Errore Ollama: {response.status_code}")
-
-            output_text = "\n\n".join(traduzione_finale)
-            output_text = applica_glossario(output_text)
-            
-            return jsonify({"translated_text": output_text})
-
-        except requests.exceptions.ConnectionError:
-            err_msg = "Impossibile connettersi ad Ollama (porta 11434). Assicurati di aver eseguito la Cella 2 del Notebook su Colab per installare ed avviare Ollama e TranslateGemma 12B."
-            print(f"❌ Errore traduzione: {err_msg}")
-            return {"error": err_msg}, 500
-        except Exception as e:
-            print(f"❌ Errore traduzione: {str(e)}")
-            return {"error": str(e)}, 500
-
-@app.route('/generate_xtts', methods=['POST'])
-def generate_xtts():
-    with audio_lock:
-        try:
-            data = request.json
-            text = data.get('text', '')
-            voice = data.get('voice', 'xtts_female')
-            cap_id = data.get('capitolo_id', 'Singolo')
-            lang = data.get('lang', 'it')
-            
-            if not text.strip(): return {"error": "Testo vuoto"}, 400
-            
-            print(f"\n🎙️ Generazione XTTS avviata (Voce: {voice}, Lingua: {lang.upper()})...")
-            tts = get_xtts()
-            
-            # Scelta della voce
-            if voice == "xtts_male":
-                base_speaker = "voce_rif_male"
-            elif voice == "xtts_female":
-                base_speaker = "voce_rif_female"
-            elif voice == "xtts_custom":
-                base_speaker = "voce_rif_custom"
-            else:
-                base_speaker = "voce_rif"
-            
-            speaker_file_lang = f"{base_speaker}_{lang}.wav"
-            if os.path.exists(speaker_file_lang):
-                speaker_file = speaker_file_lang
-            else:
-                speaker_file = f"{base_speaker}.wav"
-                
-            # Fallback se il file di riferimento non esiste affatto
-            if not os.path.exists(speaker_file):
-                print(f"⚠️ File di riferimento {speaker_file} non trovato, uso fallback voce_rif_female.wav")
-                speaker_file = "voce_rif_female.wav"
-                
-            print(f"👉 Uso file di riferimento: {speaker_file}")
-            
-            cartella_out = "audiolibri_output"
-            os.makedirs(cartella_out, exist_ok=True)
-            output_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_xtts.wav"
-            mp3_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_xtts.mp3"
-            
-            text_elaborato = text.replace("—", "... ").replace("  ", " ")
-            frasi_sicure = dividi_testo_xtts(text_elaborato)
-            audio_completo = []
-            
-            frasi_valide = [f.strip() for f in frasi_sicure if len(f.strip()) > 1]
-            print(f"🎙️ Generazione di {len(frasi_valide)} blocchi (inclusi i paragrafi)...")
-
-            lang_xtts = "zh-cn" if lang == "zh" else lang
-            
-            for i, frase in enumerate(frasi_valide):
-                if frase == "___PAUSA_PARAGRAFO___":
-                    silenzio = np.zeros(int(24000 * 0.6), dtype=np.float32)
-                    audio_completo.extend(silenzio)
-                    print("=> [Inserita Pausa di Paragrafo]")
-                    continue
+                    frasi_count += 1
+                    pct = int((frasi_count / tot) * 90) + 5
+                    audio_jobs[job_id]["current"] = frasi_count
+                    audio_jobs[job_id]["pct"] = pct
+                    audio_jobs[job_id]["msg"] = f"XTTSv2: Frase {frasi_count} di {tot} ({pct}%)"
                     
-                is_esclamativa = '!' in frase
-                is_interrogativa = '?' in frase
-                is_dialogo = '"' in frase or '“' in frase or '”' in frase
-                is_interrotta = False
-                
-                if i < len(frasi_valide) - 1:
-                    if ("casa" in frase.lower() or "uno" in frase.lower()) and i >= 1: 
+                    is_esclamativa = '!' in frase
+                    is_interrogativa = '?' in frase
+                    is_dialogo = '"' in frase or '“' in frase or '”' in frase
+                    is_interrotta = False
+                    
+                    if i < len(frasi_sicure) - 1 and ("casa" in frase.lower() or "uno" in frase.lower()) and i >= 1: 
                         is_interrotta = True
 
-                frase_magica = frase.replace("...", "___PUNTINI___").replace(".", ";").replace("___PUNTINI___", "...")
-                print(f"Elaborazione: {frase_magica[:50]}...")
-                
-                audio_array = tts.tts(text=frase_magica, speaker_wav=speaker_file, language=lang_xtts)
-                audio_completo.extend(audio_array)
-                
-                if is_interrotta:
-                    durata_pausa = 0.01  
-                elif is_dialogo:
-                    durata_pausa = 0.3  
-                elif is_esclamativa or is_interrogativa:
-                    durata_pausa = 0.2  
-                else:
-                    durata_pausa = 0.15  
+                    frase_magica = frase.replace("...", "___PUNTINI___").replace(".", ";").replace("___PUNTINI___", "...")
+                    audio_array = tts.tts(text=frase_magica, speaker_wav=speaker_file, language=lang_xtts)
+                    audio_completo.extend(audio_array)
                     
-                silenzio = np.zeros(int(24000 * durata_pausa), dtype=np.float32)
-                audio_completo.extend(silenzio)
-            
-            # Normalizzazione ed export
-            audio_arr = np.array(audio_completo, dtype=np.float32)
-            max_val = np.max(np.abs(audio_arr))
-            if max_val > 0:
-                audio_arr = audio_arr / max_val
+                    durata_pausa = 0.01 if is_interrotta else (0.3 if is_dialogo else (0.2 if (is_esclamativa or is_interrogativa) else 0.15))
+                    silenzio = np.zeros(int(24000 * durata_pausa), dtype=np.float32)
+                    audio_completo.extend(silenzio)
                 
-            sf.write(output_path, audio_arr, 24000, subtype='PCM_16')
-            
-            try:
-                print("🎵 Conversione in MP3 in corso...")
-                audio_segment = AudioSegment.from_wav(output_path)
-                audio_segment.export(mp3_path, format="mp3", bitrate="192k")
-                print(f"✅ MP3 salvato: {mp3_path}")
-            except Exception as e:
-                print(f"⚠️ Errore conversione MP3: {e}")
+                audio_arr = np.array(audio_completo, dtype=np.float32)
+                max_val = np.max(np.abs(audio_arr))
+                if max_val > 0: audio_arr = audio_arr / max_val
+                sf.write(output_path, audio_arr, 24000, subtype='PCM_16')
                 
-            print("✅ Audio generato!")
-            return send_file(output_path, mimetype="audio/wav")
+                try:
+                    audio_segment = AudioSegment.from_wav(output_path)
+                    audio_segment.export(mp3_path, format="mp3", bitrate="192k")
+                except Exception:
+                    pass
+
+            audio_jobs[job_id]["pct"] = 100
+            audio_jobs[job_id]["msg"] = "Audio generato con successo!"
+            audio_jobs[job_id]["status"] = "completed"
+            audio_jobs[job_id]["audio_url"] = f"get_audio/{os.path.basename(output_path)}"
 
         except Exception as e:
-            print(f"❌ Errore XTTS: {str(e)}")
-            return {"error": str(e)}, 500
+            print(f"❌ Errore generazione audio job {job_id}: {str(e)}")
+            audio_jobs[job_id]["status"] = "error"
+            audio_jobs[job_id]["error"] = str(e)
+
+@app.route('/generate_audio_job', methods=['POST'])
+def generate_audio_job():
+    data = request.json or {}
+    text = data.get('text', '')
+    voice = data.get('voice', 'xtts_female')
+    cap_id = data.get('capitolo_id', 'Singolo')
+    lang = data.get('lang', 'it')
+    engine = data.get('engine', 'xtts')
+    
+    if not text.strip():
+        return jsonify({"error": "Testo vuoto"}), 400
+        
+    job_id = str(uuid.uuid4())[:8]
+    audio_jobs[job_id] = {
+        "status": "pending",
+        "current": 0,
+        "total": 0,
+        "pct": 0,
+        "msg": "Avvio processo in background...",
+        "audio_url": None,
+        "error": None
+    }
+    
+    t = Thread(target=esegui_generazione_audio, args=(job_id, text, voice, cap_id, lang, engine))
+    t.daemon = True
+    t.start()
+    
+    return jsonify({"job_id": job_id})
+
+@app.route('/audio_progress/<job_id>', methods=['GET'])
+def audio_progress(job_id):
+    job = audio_jobs.get(job_id)
+    if not job:
+        return jsonify({"status": "not_found", "error": "Job non trovato"}), 404
+    return jsonify(job)
+
+@app.route('/get_audio/<path:filename>', methods=['GET'])
+def get_audio(filename):
+    cartella = os.path.abspath("audiolibri_output")
+    filepath = os.path.join(cartella, filename)
+    if os.path.exists(filepath):
+        return send_file(filepath, mimetype="audio/wav")
+    return jsonify({"error": "File non trovato"}), 404
+
+# Endpoint compatibili
+@app.route('/generate_xtts', methods=['POST'])
+def generate_xtts():
+    return generate_audio_job()
 
 @app.route('/generate_kokoro', methods=['POST'])
 def generate_kokoro():
-    with audio_lock:
-        try:
-            data = request.json
-            text = data.get('text', '')
-            voice = data.get('voice', 'if_sara')
-            cap_id = data.get('capitolo_id', 'Singolo')
-            lang = data.get('lang', 'it')
-
-            if not text.strip(): return {"error": "Testo vuoto"}, 400
-            
-            print(f"\n🎙️ Generazione Kokoro avviata (Voce: {voice}, Lingua: {lang.upper()})...")
-            pipeline = get_kokoro(voice[0])
-            
-            cartella_out = "audiolibri_output"
-            os.makedirs(cartella_out, exist_ok=True)
-            output_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_kokoro.wav"
-            mp3_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_kokoro.mp3"
-            
-            frasi = dividi_testo_kokoro(text)
-            audio_completo = []
-            
-            for frase in frasi:
-                if frase == "___PAUSA_PARAGRAFO___":
-                    silenzio = np.zeros(int(24000 * 0.8), dtype=np.float32)
-                    audio_completo.extend(silenzio)
-                    continue
-                
-                frase_pulita = correggi_pronuncia(frase)
-                generator = pipeline(frase_pulita, voice=voice, speed=1.0, split_pattern='')
-                
-                for _, _, audio in generator:
-                    audio_completo.extend(audio)
-                
-                durata_pausa = 0.15 if frase.endswith(',') else 0.2
-                silenzio = np.zeros(int(24000 * durata_pausa), dtype=np.float32)
-                audio_completo.extend(silenzio)
-
-            audio_arr = np.array(audio_completo, dtype=np.float32)
-            max_val = np.max(np.abs(audio_arr))
-            if max_val > 0:
-                audio_arr = audio_arr / max_val
-                
-            sf.write(output_path, audio_arr, 24000, subtype='PCM_16')
-            
-            try:
-                audio_segment = AudioSegment.from_wav(output_path)
-                audio_segment.export(mp3_path, format="mp3", bitrate="192k")
-            except Exception as e:
-                print(f"⚠️ Errore conversione MP3: {e}")
-                
-            print("✅ Kokoro Audio generato!")
-            return send_file(output_path, mimetype="audio/wav")
-            
-        except Exception as e:
-            print(f"❌ Errore Kokoro: {str(e)}")
-            return {"error": str(e)}, 500
+    return generate_audio_job()
 
 @app.route('/save_and_export', methods=['POST'])
 def save_and_export():
