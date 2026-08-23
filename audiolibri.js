@@ -228,6 +228,9 @@ function aggiungiCapitolo(datiEsistenti = null) {
                             <span class="material-symbols-outlined" style="font-size: 16px;">upload</span> Carica Voce (.wav)
                         </button>
                     </div>
+                    <div style="font-size: 11px; color: var(--md-sys-color-outline); margin-top: 4px;">
+                        💡 <em>Suggerimento:</em> Caricare un file .wav con una durata consigliata dai <strong>6 ai 12 secondi</strong>.
+                    </div>
                     <div id="status-clone-file-${id}" style="font-size: 12px; margin-top: 4px; color: var(--md-sys-color-primary); font-weight: 500;"></div>
                 </div>
                 
