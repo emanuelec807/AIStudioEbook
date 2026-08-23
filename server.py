@@ -308,34 +308,54 @@ def translate_text():
                         f"<start_of_turn>model\n"
                     )
                     
-                    contesto_memoria = 4096 if "12b" in model_scelto else 8192
-
-                    response = requests.post(f"{ollama_url}/api/generate", json={
-                        "model": model_scelto,
-                        "prompt": prompt_gemma,
-                        "stream": True,
-                        "options": {
-                            "num_ctx": contesto_memoria, 
-                            "temperature": 0.3,
-                            "repeat_penalty": 1.4,
-                            "repeat_last_n": 128,
-                            "top_p": 0.9,
-                            "stop": ["<start_of_turn>", "<end_of_turn>", "user:", "model:"]
-                        }
-                    }, stream=True)
+                    contesto_memoria = 2048
 
                     blocco_pulito = ""
-                    if response.status_code == 200:
-                        for line in response.iter_lines():
-                            if line:
-                                body = json.loads(line)
-                                parola = body.get("response", "")
-                                if "<start_of_turn>" in parola: break
-                                blocco_pulito += parola
-                        
-                        traduzione_finale.append(blocco_pulito.strip())
-                    else:
-                        raise Exception(f"Errore Ollama: {response.status_code}")
+                    max_tentativi = 2
+                    ultimo_errore = None
+
+                    for tentativo in range(max_tentativi):
+                        try:
+                            response = requests.post(f"{ollama_url}/api/generate", json={
+                                "model": model_scelto,
+                                "prompt": prompt_gemma,
+                                "stream": True,
+                                "options": {
+                                    "num_ctx": contesto_memoria, 
+                                    "temperature": 0.3,
+                                    "repeat_penalty": 1.4,
+                                    "repeat_last_n": 128,
+                                    "top_p": 0.9,
+                                    "stop": ["<start_of_turn>", "<end_of_turn>", "user:", "model:"]
+                                }
+                            }, stream=True, timeout=180)
+
+                            if response.status_code == 200:
+                                for line in response.iter_lines():
+                                    if line:
+                                        body = json.loads(line)
+                                        parola = body.get("response", "")
+                                        if "<start_of_turn>" in parola: break
+                                        blocco_pulito += parola
+                                
+                                ultimo_errore = None
+                                break
+                            else:
+                                err_dettaglio = response.text
+                                try:
+                                    err_dettaglio = response.json().get("error", response.text)
+                                except Exception:
+                                    pass
+                                ultimo_errore = f"Ollama {response.status_code}: {err_dettaglio}"
+                                time.sleep(1)
+                        except Exception as e_req:
+                            ultimo_errore = str(e_req)
+                            time.sleep(1)
+
+                    if ultimo_errore:
+                        raise Exception(ultimo_errore)
+
+                    traduzione_finale.append(blocco_pulito.strip())
 
                 output_text = "\n\n".join(traduzione_finale)
                 output_text = applica_glossario(output_text)
