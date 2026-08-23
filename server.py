@@ -90,12 +90,12 @@ def pulisci_testo_per_tts(testo):
     testo = re.sub(r'[ \t]+', ' ', testo)
     return testo
 
-def dividi_testo_xtts(testo, limite=180):
+def dividi_testo_xtts(testo, limite=150):
     paragrafi = [p.strip() for p in testo.split('\n') if p.strip()]
     frammenti_finali = []
     
-    # 1. AGGIUNTA PUNTEGGIATURA ASIATICA (。！？) E SPAZIO OPZIONALE (\s*)
-    pattern = r'([.!?。！？]["”»\']?\s*)'
+    # Include punto, esclamativo, interrogativo e punto e virgola
+    pattern = r'([.!?;。！？；]["”»\']?\s*)'
     
     for paragrafo in paragrafi:
         paragrafo = paragrafo.replace("...", "___PUNTINI___")
