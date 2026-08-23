@@ -22,11 +22,21 @@ from bs4 import BeautifulSoup
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 
-# Monkey-patch per compatibilità XTTS con transformers recenti
+# Monkey-patch per compatibilità totale XTTS con tutte le versioni di transformers
 try:
     import transformers.pytorch_utils
     if not hasattr(transformers.pytorch_utils, "isin_mps_friendly"):
         transformers.pytorch_utils.isin_mps_friendly = lambda elements, test_elements: torch.isin(elements, test_elements)
+except Exception:
+    pass
+
+try:
+    import transformers.utils.import_utils
+    if not hasattr(transformers.utils.import_utils, "is_torchcodec_available"):
+        transformers.utils.import_utils.is_torchcodec_available = lambda: False
+    import transformers.utils
+    if not hasattr(transformers.utils, "is_torchcodec_available"):
+        transformers.utils.is_torchcodec_available = lambda: False
 except Exception:
     pass
 
