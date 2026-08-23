@@ -103,13 +103,10 @@ def pulisci_testo_per_tts(testo):
 def dividi_testo_xtts(testo, limite=150):
     paragrafi = [p.strip() for p in testo.split('\n') if p.strip()]
     frammenti_finali = []
-    
-    # Include punto, esclamativo, interrogativo e punto e virgola
     pattern = r'([.!?;。！？；]["”»\']?\s*)'
     
     for paragrafo in paragrafi:
         parti = re.split(pattern, paragrafo + " ")
-        
         frasi = []
         for i in range(0, len(parti) - 1, 2):
             f = (parti[i] + parti[i+1]).strip()
@@ -117,46 +114,26 @@ def dividi_testo_xtts(testo, limite=150):
         if len(parti) % 2 != 0 and parti[-1].strip():
             frasi.append(parti[-1].strip())
         
-        chunk_temporaneo = ""
         for frase in frasi:
             if not frase: continue
             
-            # 2. AGGIUNTO CONTROLLO ENFASI ANCHE PER SIMBOLI ASIATICI
-            chiude_con_enfasi = bool(re.search(r'[!?！？]["”»\']?$', frase))
-            
-            if len(chunk_temporaneo) + len(frase) <= limite:
-                chunk_temporaneo += frase + " "
-                if chiude_con_enfasi:
-                    frammenti_finali.append(chunk_temporaneo.strip())
-                    chunk_temporaneo = ""
+            # Se la singola frase è più lunga del limite (150 caratteri), spezza su virgole o trattini
+            if len(frase) > limite:
+                sub_frasi = re.split(r'(?<=[,;:，、；：—–\-])\s*', frase)
+                sub_chunk = ""
+                for sub in sub_frasi:
+                    if not sub.strip(): continue
+                    if len(sub_chunk) + len(sub) <= limite:
+                        sub_chunk += sub + " "
+                    else:
+                        if sub_chunk.strip():
+                            frammenti_finali.append(sub_chunk.strip())
+                        sub_chunk = sub + " "
+                if sub_chunk.strip():
+                    frammenti_finali.append(sub_chunk.strip())
             else:
-                if chunk_temporaneo.strip():
-                    frammenti_finali.append(chunk_temporaneo.strip())
-                
-                if len(frase) > limite:
-                    # 3. Taglio di emergenza per frasi lunghe SOLO su virgole, punti e virgola, trattini
-                    sub_frasi = re.split(r'(?<=[,;:，、；：—–\-])\s*', frase)
-                    sub_chunk = ""
-                    for sub in sub_frasi:
-                        if not sub.strip(): continue
-                        if len(sub_chunk) + len(sub) <= limite:
-                            sub_chunk += sub + " "
-                        else:
-                            if sub_chunk.strip():
-                                frammenti_finali.append(sub_chunk.strip())
-                            sub_chunk = sub + " "
-                    chunk_temporaneo = sub_chunk
-                    if chiude_con_enfasi and chunk_temporaneo.strip():
-                        frammenti_finali.append(chunk_temporaneo.strip())
-                        chunk_temporaneo = ""
-                else:
-                    chunk_temporaneo = frase + " "
-                    if chiude_con_enfasi:
-                        frammenti_finali.append(chunk_temporaneo.strip())
-                        chunk_temporaneo = ""
-                        
-        if chunk_temporaneo.strip():
-            frammenti_finali.append(chunk_temporaneo.strip())
+                # Ogni frase rimane un'unità autonoma con il suo punto alla fine (nessun punto in mezzo)
+                frammenti_finali.append(frase.strip())
             
         frammenti_finali.append("___PAUSA_PARAGRAFO___")
         
