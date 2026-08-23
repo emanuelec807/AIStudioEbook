@@ -108,12 +108,12 @@ def dividi_testo_xtts(testo, limite=150):
     pattern = r'([.!?;。！？；]["”»\']?\s*)'
     
     for paragrafo in paragrafi:
-        paragrafo = paragrafo.replace("...", "___PUNTINI___")
         parti = re.split(pattern, paragrafo + " ")
         
         frasi = []
         for i in range(0, len(parti) - 1, 2):
-            frasi.append((parti[i] + parti[i+1]).strip())
+            f = (parti[i] + parti[i+1]).strip()
+            if f: frasi.append(f)
         if len(parti) % 2 != 0 and parti[-1].strip():
             frasi.append(parti[-1].strip())
         
@@ -127,11 +127,11 @@ def dividi_testo_xtts(testo, limite=150):
             if len(chunk_temporaneo) + len(frase) <= limite:
                 chunk_temporaneo += frase + " "
                 if chiude_con_enfasi:
-                    frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                    frammenti_finali.append(chunk_temporaneo.strip())
                     chunk_temporaneo = ""
             else:
                 if chunk_temporaneo.strip():
-                    frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                    frammenti_finali.append(chunk_temporaneo.strip())
                 
                 if len(frase) > limite:
                     # 3. Taglio di emergenza per frasi lunghe SOLO su virgole, punti e virgola, trattini
@@ -143,20 +143,20 @@ def dividi_testo_xtts(testo, limite=150):
                             sub_chunk += sub + " "
                         else:
                             if sub_chunk.strip():
-                                frammenti_finali.append(sub_chunk.strip().replace("___PUNTINI___", "..."))
+                                frammenti_finali.append(sub_chunk.strip())
                             sub_chunk = sub + " "
                     chunk_temporaneo = sub_chunk
                     if chiude_con_enfasi and chunk_temporaneo.strip():
-                        frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                        frammenti_finali.append(chunk_temporaneo.strip())
                         chunk_temporaneo = ""
                 else:
                     chunk_temporaneo = frase + " "
                     if chiude_con_enfasi:
-                        frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+                        frammenti_finali.append(chunk_temporaneo.strip())
                         chunk_temporaneo = ""
                         
         if chunk_temporaneo.strip():
-            frammenti_finali.append(chunk_temporaneo.strip().replace("___PUNTINI___", "..."))
+            frammenti_finali.append(chunk_temporaneo.strip())
             
         frammenti_finali.append("___PAUSA_PARAGRAFO___")
         
