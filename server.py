@@ -54,43 +54,39 @@ audio_jobs = {}
 
 # --- HELPER FUNCTIONS FOR TEXT SPLITTING & PROCESSING ---
 def dividi_testo_xtts(testo, limite=180):
-    # Divide il testo per frasi corte, gestendo punteggiatura comune e asiatica
-    pattern = r'([^.!?。！？\n]+[.!?。！？]*)'
-    pezzi = re.findall(pattern, testo)
-    
-    frasi_finali = []
-    for pezzo in pezzi:
-        pezzo = pezzo.strip()
-        if not pezzo:
-            continue
-        
-        # Se un blocco supera il limite di caratteri, lo spezziamo sulle virgole/pause minori
-        if len(pezzo) > limite:
-            sotto_pezzi = re.split(r'([,;，、\s]{2,}|[,;，、])', pezzo)
-            accumulo = ""
-            for sp in sotto_pezzi:
-                if len(accumulo) + len(sp) > limite:
-                    if accumulo.strip():
-                        frasi_finali.append(accumulo.strip())
-                    accumulo = sp
-                else:
-                    accumulo += sp
-            if accumulo.strip():
-                frasi_finali.append(accumulo.strip())
-        else:
-            frasi_finali.append(pezzo)
-            
-    # Mantiene le pause tra i paragrafi
     righe = testo.split('\n')
     risultato = []
+    
     for riga in righe:
-        if not riga.strip():
+        riga = riga.strip()
+        if not riga:
             continue
-        frasi_riga = []
-        for f in frasi_finali:
-            if f in riga:
-                frasi_riga.append(f)
-        risultato.extend(frasi_riga)
+        
+        pattern = r'([^.!?。！？\n]+[.!?。！？]*)'
+        pezzi = re.findall(pattern, riga)
+        if not pezzi:
+            pezzi = [riga]
+            
+        for pezzo in pezzi:
+            pezzo = pezzo.strip()
+            if not pezzo:
+                continue
+            
+            if len(pezzo) > limite:
+                sotto_pezzi = re.split(r'([,;，、\s]{2,}|[,;，、])', pezzo)
+                accumulo = ""
+                for sp in sotto_pezzi:
+                    if len(accumulo) + len(sp) > limite:
+                        if accumulo.strip():
+                            risultato.append(accumulo.strip())
+                        accumulo = sp
+                    else:
+                        accumulo += sp
+                if accumulo.strip():
+                    risultato.append(accumulo.strip())
+            else:
+                risultato.append(pezzo)
+                
         risultato.append("___PAUSA_PARAGRAFO___")
         
     if risultato and risultato[-1] == "___PAUSA_PARAGRAFO___":
@@ -99,17 +95,19 @@ def dividi_testo_xtts(testo, limite=180):
     return risultato
 
 def dividi_testo_kokoro(testo):
-    # Divide il testo in base a frasi logiche e pause minori per Kokoro
     pattern = r'([^.!?,;:。！？\n]+[.!?,;:。！？]*)'
-    pezzi = re.findall(pattern, testo)
-    
-    risultato = []
     righe = testo.split('\n')
+    risultato = []
+    
     for riga in righe:
-        if not riga.strip():
+        riga = riga.strip()
+        if not riga:
             continue
+        pezzi = re.findall(pattern, riga)
+        if not pezzi:
+            pezzi = [riga]
         for pezzo in pezzi:
-            if pezzo.strip() and pezzo in riga:
+            if pezzo.strip():
                 risultato.append(pezzo.strip())
         risultato.append("___PAUSA_PARAGRAFO___")
         
@@ -394,21 +392,21 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                 mp3_path = f"{cartella_out}/Capitolo_{cap_id}_{lang}_kokoro.mp3"
                 
                 frasi = dividi_testo_kokoro(text)
-                frasi_valide = [f.strip() for f in frasi if f.strip() and f != "___PAUSA_PARAGRAFO___"]
-                tot = max(1, len(frasi_valide))
+                frasi_da_sintetizzare = [f for f in frasi if f != "___PAUSA_PARAGRAFO___" and f.strip()]
+                tot = max(1, len(frasi_da_sintetizzare))
                 audio_jobs[job_id]["total"] = tot
                 
                 audio_completo = []
                 frasi_count = 0
                 
                 for frase in frasi:
-                    if frase == "___PAUSA_PARAGRAFO___":
+                    if frase == "___PAUSA_PARAGRAFO___" or not frase.strip():
                         silenzio = np.zeros(int(24000 * 0.8), dtype=np.float32)
                         audio_completo.extend(silenzio)
                         continue
                     
                     frasi_count += 1
-                    pct = int((frasi_count / tot) * 90) + 5
+                    pct = min(99, max(5, int((frasi_count / tot) * 95)))
                     audio_jobs[job_id]["current"] = frasi_count
                     audio_jobs[job_id]["pct"] = pct
                     audio_jobs[job_id]["msg"] = "Generazione audio in corso..."
@@ -449,8 +447,8 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                 
                 text_elaborato = text.replace("—", "... ").replace("  ", " ")
                 frasi_sicure = dividi_testo_xtts(text_elaborato)
-                frasi_valide = [f.strip() for f in frasi_sicure if len(f.strip()) > 1 and f != "___PAUSA_PARAGRAFO___"]
-                tot = max(1, len(frasi_valide))
+                frasi_da_sintetizzare = [f for f in frasi_sicure if f != "___PAUSA_PARAGRAFO___" and f.strip()]
+                tot = max(1, len(frasi_da_sintetizzare))
                 audio_jobs[job_id]["total"] = tot
                 
                 audio_completo = []
@@ -458,13 +456,13 @@ def esegui_generazione_audio(job_id, text, voice, cap_id, lang, engine):
                 lang_xtts = "zh-cn" if lang == "zh" else lang
                 
                 for i, frase in enumerate(frasi_sicure):
-                    if frase == "___PAUSA_PARAGRAFO___":
+                    if frase == "___PAUSA_PARAGRAFO___" or not frase.strip():
                         silenzio = np.zeros(int(24000 * 0.6), dtype=np.float32)
                         audio_completo.extend(silenzio)
                         continue
                     
                     frasi_count += 1
-                    pct = int((frasi_count / tot) * 90) + 5
+                    pct = min(99, max(5, int((frasi_count / tot) * 95)))
                     audio_jobs[job_id]["current"] = frasi_count
                     audio_jobs[job_id]["pct"] = pct
                     audio_jobs[job_id]["msg"] = "Generazione audio in corso..."

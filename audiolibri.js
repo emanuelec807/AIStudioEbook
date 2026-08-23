@@ -402,8 +402,9 @@ async function generaAudio(id) {
                 const job = await progRes.json();
 
                 if (job.status === 'processing' || job.status === 'pending') {
-                    progFill.style.width = `${job.pct}%`;
-                    progPct.innerText = `${job.pct}%`;
+                    const safePct = Math.min(99, Math.max(5, parseInt(job.pct) || 5));
+                    progFill.style.width = `${safePct}%`;
+                    progPct.innerText = `${safePct}%`;
                     progMsg.innerText = 'Generazione audio in corso...';
                     statusDiv.innerHTML = `<span class="material-symbols-outlined spin" style="color:var(--md-sys-color-primary);">autorenew</span> Generazione audio in corso...`;
                 } else if (job.status === 'completed') {
@@ -772,8 +773,9 @@ async function avviaAudiolibroCompleto() {
                 const job = await progRes.json();
 
                 if (job.status === 'processing' || job.status === 'pending') {
-                    if (fillEl) fillEl.style.width = `${job.pct}%`;
-                    if (pctEl) pctEl.innerText = `${job.pct}%`;
+                    const safePct = Math.min(99, Math.max(5, parseInt(job.pct) || 5));
+                    if (fillEl) fillEl.style.width = `${safePct}%`;
+                    if (pctEl) pctEl.innerText = `${safePct}%`;
                     if (msgEl) msgEl.innerText = 'Generazione audiolibro in corso...';
                 } else if (job.status === 'completed') {
                     clearInterval(pollTimer);
