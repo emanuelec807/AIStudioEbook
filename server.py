@@ -163,8 +163,9 @@ def get_xtts():
         torch.set_num_threads(1)
         try:
             from TTS.api import TTS
-        except ImportError as e:
-            raise Exception("Libreria 'TTS' (Coqui TTS) non trovata. Esegui la Cella 2 del Notebook Colab per installare 'TTS' e poi riavvia il server.")
+        except Exception as e:
+            print(f"❌ Errore importazione TTS: {repr(e)}")
+            raise Exception(f"Errore importazione TTS: {repr(e)}")
         xtts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=gpu)
         print(f"✅ Modello XTTS caricato con successo sulla scheda video: {'CUDA' if gpu else 'CPU'}")
     return xtts_model
